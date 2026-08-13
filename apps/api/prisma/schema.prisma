@@ -1,0 +1,202 @@
+// Modelagem do sistema de check-in de professores da UNIVC.
+//
+// LGPD: nenhum campo deste schema armazena dado biometrico bruto. A biometria
+// e validada localmente no aparelho (Face ID / digital) e o backend recebe
+// apenas o rotulo do metodo usado, em `RegistroPonto.metodoBiometrico`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TipoRegistro {
+  CHEGADA
+  SAIDA
+}
+
+enum StatusRegistro {
+  VALIDADO
+  PENDENTE_APROVACAO
+  REJEITADO
+}
+
+/// Rotulo do metodo biometrico validado no proprio aparelho.
+/// NAO representa e nao acompanha nenhum dado biometrico.
+enum MetodoBiometrico {
+  FACE_ID
+  DIGITAL
+  NENHUM
+}
+
+enum AcaoAuditoria {
+  LOGIN_SUCESSO
+  LOGIN_FALHA
+  REFRESH_TOKEN
+  LOGOUT
+  TENTATIVA_CHECKIN
+  APROVACAO_MANUAL
+  REJEICAO_MANUAL
+}
+
+enum ResultadoAuditoria {
+  SUCESSO
+  REJEITADO
+  ERRO
+}
+
+model Professor {
+  id             String   @id @default(uuid()) @db.Uuid
+  nome           String   @db.VarChar(160)
+  cpf            String   @unique @db.VarChar(11)
+  email          String   @unique @db.VarChar(160)
+  senhaHash      String   @map("senha_hash")
+  cursoVinculado String   @map("curso_vinculado") @db.VarChar(120)
+  ativo          Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  registros     RegistroPonto[]
+  refreshTokens RefreshToken[]
+  auditorias    LogAuditoria[]
+
+  @@index([cursoVinculado])
+  @@index([ativo])
+  @@map("professores")
+}
+
+/// Usuario de RH/coordenacao que acessa o dashboard. Papel separado do professor:
+/// um admin nao bate ponto e um professor nao acessa as rotas /admin.
+model Admin {
+  id        String   @id @default(uuid()) @db.Uuid
+  nome      String   @db.VarChar(160)
+  email     String   @unique @db.VarChar(160)
+  senhaHash String   @map("senha_hash")
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  refreshTokens    RefreshToken[]
+  registrosDecisao RegistroPonto[] @relation("AdminDecisor")
+  auditorias       LogAuditoria[]
+
+  @@map("admins")
+}
+
+/// Unidade fisica com geocerca circular. Ha varios registros porque a
+/// instituicao pode ter polos adicionais alem do campus principal.
+model Campus {
+  id                  String   @id @default(uuid()) @db.Uuid
+  nome                String   @unique @db.VarChar(160)
+  latitudeCentral     Float    @map("latitude_central")
+  longitudeCentral    Float    @map("longitude_central")
+  raioPermitidoMetros Int      @map("raio_permitido_metros")
+  ativo               Boolean  @default(true)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  registros RegistroPonto[]
+
+  @@index([ativo])
+  @@map("campi")
+}
+
+model RegistroPonto {
+  id          String @id @default(uuid()) @db.Uuid
+  professorId String @map("professor_id") @db.Uuid
+
+  tipo TipoRegistro
+
+  /// Horario autoritativo do registro. SEMPRE gerado pelo backend com now();
+  /// qualquer horario enviado pelo cliente e ignorado.
+  timestampServidor DateTime @default(now()) @map("timestamp_servidor")
+
+  latitude  Float
+  longitude Float
+
+  /// Distancia em metros ate o campus mais proximo, calculada por Haversine
+  /// no servidor no momento do registro.
+  distanciaDoCampusMetros Float @map("distancia_do_campus_metros")
+
+  /// Precisao do GPS reportada pelo aparelho, quando disponivel.
+  precisaoMetros Float? @map("precisao_metros")
+
+  /// Rotulo do metodo biometrico validado no aparelho. Sem dado biometrico.
+  metodoBiometrico MetodoBiometrico @map("metodo_biometrico")
+
+  status StatusRegistro
+
+  /// true quando o registro chegou pela fila offline do app.
+  sincronizadoOffline Boolean @default(false) @map("sincronizado_offline")
+
+  /// Horario declarado pelo aparelho para um registro feito sem conexao.
+  /// Guardado apenas para auditoria e para o relatorio de jornada; nunca
+  /// substitui `timestampServidor`.
+  registradoOfflineEm DateTime? @map("registrado_offline_em")
+
+  /// Preenchida pelo RH ao aprovar ou rejeitar manualmente um registro.
+  justificativaManual String? @map("justificativa_manual") @db.VarChar(500)
+
+  campusId    String?   @map("campus_id") @db.Uuid
+  decididoPor String?   @map("decidido_por_id") @db.Uuid
+  decididoEm  DateTime? @map("decidido_em")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  professor Professor @relation(fields: [professorId], references: [id], onDelete: Cascade)
+  campus    Campus?   @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  decisor   Admin?    @relation("AdminDecisor", fields: [decididoPor], references: [id], onDelete: SetNull)
+
+  @@index([professorId])
+  @@index([timestampServidor])
+  @@index([professorId, timestampServidor])
+  @@index([status])
+  @@map("registros_ponto")
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  professorId String?   @map("professor_id") @db.Uuid
+  adminId     String?   @map("admin_id") @db.Uuid
+  expiraEm    DateTime  @map("expira_em")
+  revogadoEm  DateTime? @map("revogado_em")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  professor Professor? @relation(fields: [professorId], references: [id], onDelete: Cascade)
+  admin     Admin?     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([professorId])
+  @@index([adminId])
+  @@index([expiraEm])
+  @@map("refresh_tokens")
+}
+
+/// Trilha de auditoria. Registra toda tentativa de check-in, inclusive as
+/// rejeitadas, e os eventos de autenticacao e decisao manual do RH.
+model LogAuditoria {
+  id          String             @id @default(uuid()) @db.Uuid
+  acao        AcaoAuditoria
+  resultado   ResultadoAuditoria
+  professorId String?            @map("professor_id") @db.Uuid
+  adminId     String?            @map("admin_id") @db.Uuid
+  registroId  String?            @map("registro_id") @db.Uuid
+  /// Detalhes nao sensiveis do evento (motivo, distancia, tipo). Nunca contem
+  /// dado biometrico nem credenciais.
+  detalhes    Json?
+  ip          String?            @db.VarChar(64)
+  userAgent   String?            @map("user_agent") @db.VarChar(300)
+  criadoEm    DateTime           @default(now()) @map("criado_em")
+
+  professor Professor? @relation(fields: [professorId], references: [id], onDelete: SetNull)
+  admin     Admin?     @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([criadoEm])
+  @@index([professorId])
+  @@index([acao])
+  @@map("logs_auditoria")
+}

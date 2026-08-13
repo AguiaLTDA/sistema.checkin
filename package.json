@@ -1,0 +1,29 @@
+{
+  "name": "univc-checkin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de controle de presenca de professores do Centro Universitario Vale do Cricare (UNIVC)",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "packages/*",
+    "apps/api",
+    "apps/dashboard"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:shared": "npm run build -w @univc/shared",
+    "dev:api": "npm run dev -w @univc/api",
+    "dev:dashboard": "npm run dev -w @univc/dashboard",
+    "dev:mobile": "npm start --prefix apps/mobile",
+    "db:migrate": "npm run db:migrate -w @univc/api",
+    "db:seed": "npm run db:seed -w @univc/api",
+    "db:reset": "npm run db:reset -w @univc/api",
+    "test": "npm run test -w @univc/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f api"
+  }
+}

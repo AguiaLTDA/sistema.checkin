@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "UNIVC Check-in",
+    "slug": "univc-checkin",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "univc-checkin",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "br.univc.checkin",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "O app usa sua localizacao no momento do registro para confirmar que voce esta no campus. A posicao so e lida quando voce toca em marcar chegada ou saida.",
+        "NSFaceIDUsageDescription": "A biometria confirma que e voce quem esta registrando o ponto. A validacao acontece no proprio aparelho: nenhuma imagem ou digital sai do celular."
+      }
+    },
+    "android": {
+      "package": "br.univc.checkin",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F2F4F",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O app usa sua localizacao no momento do registro para confirmar que voce esta no campus."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "A biometria confirma sua identidade no proprio aparelho, sem enviar dado biometrico para o servidor."
+        }
+      ]
+    ]
+  }
+}

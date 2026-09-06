@@ -195,7 +195,7 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     expect(corpo.motivo).toBe('FORA_DO_RAIO');
   });
 
-  it('marca como pendente o registro sem biometria confirmada', async () => {
+  it('valida o registro dentro do raio mesmo sem biometria confirmada', async () => {
     const token = await autenticarProfessor();
 
     const resposta = await checkin(token, {
@@ -204,8 +204,8 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
       metodo_biometrico: 'NENHUM',
     });
 
-    expect(resposta.json().registro.status).toBe('PENDENTE_APROVACAO');
-    expect(resposta.json().motivo).toBe('BIOMETRIA_NAO_CONFIRMADA');
+    expect(resposta.json().registro.status).toBe('VALIDADO');
+    expect(resposta.json().motivo).toBe('DENTRO_DO_RAIO');
   });
 
   it('aceita registro da fila offline guardando o horario declarado a parte', async () => {

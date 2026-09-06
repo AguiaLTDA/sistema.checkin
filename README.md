@@ -3,16 +3,19 @@
 Controle de presença de professores do **Centro Universitário Vale do Cricaré (UNIVC)**.
 
 O professor marca chegada e saída pelo celular, e o registro só é validado
-automaticamente quando dois fatores conferem:
+automaticamente quando confere um fator:
 
 1. **Geolocalização** — o servidor calcula, por Haversine, a distância entre a
    posição enviada e o campus mais próximo, e compara com o raio permitido
    daquele campus.
-2. **Biometria do aparelho** — Face ID ou digital, validados pelo próprio
-   sistema operacional do celular. Nenhum dado biométrico chega ao servidor.
 
-Registros fora do raio (ou sem biometria confirmada) não são descartados: entram
-como `PENDENTE_APROVACAO` e o RH decide, com justificativa obrigatória.
+O app também pode acionar a **biometria do aparelho** (Face ID ou digital,
+validados pelo próprio sistema operacional do celular; nenhum dado biométrico
+chega ao servidor), mas ela é apenas informativa: fica registrada para
+auditoria e não é exigida para validar o registro.
+
+Registros fora do raio não são descartados: entram como `PENDENTE_APROVACAO`
+e o RH decide, com justificativa obrigatória.
 
 ---
 
@@ -304,12 +307,16 @@ Não existe campo de horário: o `timestamp_servidor` é sempre `now()` no backe
 
 | Situação                                   | Status                |
 | ------------------------------------------ | --------------------- |
-| Dentro do raio, com biometria confirmada   | `VALIDADO`            |
+| Dentro do raio do campus mais próximo      | `VALIDADO`            |
 | Fora do raio do campus mais próximo        | `PENDENTE_APROVACAO`  |
 | Nenhum campus cadastrado                   | `PENDENTE_APROVACAO`  |
-| Biometria não confirmada (`NENHUM`)        | `PENDENTE_APROVACAO`  |
 | Registro vindo da fila offline             | `PENDENTE_APROVACAO`  |
 | Decisão manual do RH                       | `VALIDADO`/`REJEITADO` |
+
+A biometria do aparelho (`metodo_biometrico`) é registrada junto com o
+check-in para fins de auditoria, mas não influencia o status — mesmo sem
+confirmação (`NENHUM`), o registro segue a regra acima com base apenas na
+geolocalização.
 
 `REJEITADO` **nunca** é atribuído automaticamente — é sempre decisão humana,
 com justificativa.

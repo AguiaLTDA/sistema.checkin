@@ -22,6 +22,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     globalSetup: ['./tests/setup-global.ts'],
+    // Banco remoto (Supabase): cada query tem round-trip de rede bem maior que
+    // um Postgres local, o timeout padrao de 5s do vitest estoura sem motivo.
+    testTimeout: 20000,
     // Os testes de integracao compartilham o mesmo banco: rodar em serie evita
     // que o TRUNCATE de um arquivo apague as fixtures de outro.
     fileParallelism: false,

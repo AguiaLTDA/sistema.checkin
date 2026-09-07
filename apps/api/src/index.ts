@@ -15,8 +15,12 @@ async function principal(): Promise<void> {
   process.on('SIGINT', () => void encerrar('SIGINT'));
   process.on('SIGTERM', () => void encerrar('SIGTERM'));
 
-  await app.listen({ port: env.API_PORT, host: env.API_HOST });
-  app.log.info(`API UNIVC Check-in ouvindo em ${env.API_HOST}:${env.API_PORT}`);
+  // Plataformas como o Render atribuem a porta em tempo de execucao via PORT;
+  // API_PORT continua valendo no dev local, onde PORT nao esta definida.
+  const porta = process.env.PORT ? Number(process.env.PORT) : env.API_PORT;
+
+  await app.listen({ port: porta, host: env.API_HOST });
+  app.log.info(`API UNIVC Check-in ouvindo em ${env.API_HOST}:${porta}`);
 }
 
 principal().catch((erro) => {

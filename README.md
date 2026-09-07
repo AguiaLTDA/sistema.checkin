@@ -20,6 +20,7 @@ o RH decide, com justificativa obrigatória.
 
 - [Arquitetura](#arquitetura)
 - [Subindo o ambiente](#subindo-o-ambiente)
+- [Deploy no Render](#deploy-no-render)
 - [Usuários de teste](#usuários-de-teste)
 - [Rodando o app no Expo Go](#rodando-o-app-no-expo-go)
 - [Testando o fluxo completo](#testando-o-fluxo-completo)
@@ -134,6 +135,49 @@ npm run dev:dashboard       # http://localhost:5173
 | `npm test`              | suíte completa da API                                |
 | `npm run typecheck`     | typecheck de todos os workspaces                     |
 | `npm run docker:logs`   | logs da API no compose                               |
+
+---
+
+## Deploy no Render
+
+O banco continua sendo o Supabase (configurado à parte, direto no painel do
+Supabase). O [`render.yaml`](render.yaml) na raiz descreve dois serviços:
+
+| Serviço                    | Tipo        | O que serve                              |
+| --------------------------- | ----------- | ----------------------------------------- |
+| `univc-checkin-api`         | Web Service | API Fastify (`apps/api`)                  |
+| `univc-checkin-dashboard`   | Static Site | Dashboard React buildado (`apps/dashboard`) |
+
+### Passo a passo
+
+1. No Render, **New +** → **Blueprint**, aponte para este repositório e
+   selecione a branch (o blueprint já sugere `feat/checkin-somente-localizacao`).
+2. O Render vai criar os dois serviços a partir do `render.yaml`, mas algumas
+   variáveis ficam marcadas para preencher manualmente (`sync: false`) — o
+   painel pede isso durante a criação:
+   - **`univc-checkin-api`** → `DATABASE_URL`: connection string do **Session
+     pooler** do Supabase (Project Settings → Database → Connection string;
+     a conexão direta `db.<ref>.supabase.co` é IPv6-only e não funciona em
+     boa parte dos ambientes). `CORS_ORIGINS` pode ficar em branco por
+     enquanto — é ajustada no passo 4.
+   - **`univc-checkin-dashboard`** → `VITE_API_URL`: também deixe em branco
+     por enquanto.
+3. Deploy inicial: a API sobe (rodando `prisma migrate deploy` como parte do
+   build) e o dashboard builda, mas sem as URLs cruzadas o CORS ainda barra as
+   chamadas. Anote as duas URLs que o Render atribuiu, do tipo
+   `https://univc-checkin-api.onrender.com` e
+   `https://univc-checkin-dashboard.onrender.com`.
+4. Preencha as variáveis que faltaram e reimplante:
+   - `univc-checkin-api` → `CORS_ORIGINS` = URL do dashboard.
+   - `univc-checkin-dashboard` → `VITE_API_URL` = URL da API (variável só
+     entra no build do Vite, então precisa de um novo deploy do site estático
+     depois de mudar).
+5. Confirme com `curl https://<url-da-api>.onrender.com/health` e abrindo o
+   dashboard no navegador.
+
+> **Plano gratuito do Render**: o Web Service "dorme" após um período sem
+> tráfego e o primeiro request depois disso demora mais (cold start). Isso é
+> esperado e não indica problema na API.
 
 ---
 

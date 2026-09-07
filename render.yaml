@@ -1,0 +1,71 @@
+# Blueprint do Render (https://render.com/docs/blueprint-spec) para o UNIVC
+# Check-in: API (Fastify) como Web Service + Dashboard (Vite) como Static Site.
+#
+# Uso: no Render, "New +" -> "Blueprint", aponte para este repositorio e
+# selecione a branch. As variaveis marcadas com `sync: false` precisam ser
+# preenchidas manualmente no painel (veja a secao "Deploy no Render" do
+# README para o passo a passo e a ordem de preenchimento).
+#
+# O banco continua sendo o Supabase configurado externamente: este blueprint
+# nao cria banco de dados no Render.
+
+services:
+  - type: web
+    name: univc-checkin-api
+    env: node
+    plan: free
+    region: oregon
+    branch: feat/checkin-somente-localizacao
+    buildCommand: >-
+      npm ci &&
+      npm run build:shared &&
+      npx prisma generate --schema=apps/api/prisma/schema.prisma &&
+      npm run build -w @univc/api &&
+      npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+    startCommand: npm run start -w @univc/api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      # Connection string do Supabase (pooler, porta 5432) - preencher no painel.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: JWT_REFRESH_TTL
+        value: 7d
+      # Origem do dashboard (preencher depois que o Static Site tiver URL).
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CHECKIN_RATE_LIMIT_MAX
+        value: "10"
+      - key: CHECKIN_RATE_LIMIT_WINDOW
+        value: 1 minute
+      - key: RELATORIO_TIMEZONE
+        value: America/Sao_Paulo
+
+  - type: web
+    name: univc-checkin-dashboard
+    env: static
+    plan: free
+    branch: feat/checkin-somente-localizacao
+    buildCommand: npm ci && npm run build:shared && npm run build -w @univc/dashboard
+    staticPublishPath: apps/dashboard/dist
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # URL publica da API (preencher depois que o Web Service tiver URL).
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

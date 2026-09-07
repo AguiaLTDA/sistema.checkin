@@ -69,15 +69,15 @@ describe('decidirStatus', () => {
     expect(decisao.motivo).toBe('SEM_CAMPUS_CADASTRADO');
   });
 
-  it('manda para aprovacao quando a biometria nao foi confirmada', () => {
+  it('valida o registro dentro do raio mesmo sem biometria confirmada', () => {
     const decisao = decidirStatus({
       geocerca: dentro,
       metodoBiometrico: 'NENHUM',
       sincronizadoOffline: false,
     });
 
-    expect(decisao.status).toBe('PENDENTE_APROVACAO');
-    expect(decisao.motivo).toBe('BIOMETRIA_NAO_CONFIRMADA');
+    expect(decisao.status).toBe('VALIDADO');
+    expect(decisao.motivo).toBe('DENTRO_DO_RAIO');
   });
 
   it('manda para aprovacao registros vindos da fila offline', () => {
@@ -91,7 +91,7 @@ describe('decidirStatus', () => {
     expect(decisao.motivo).toBe('REGISTRO_OFFLINE');
   });
 
-  it('prioriza a falha de localizacao sobre a de biometria', () => {
+  it('prioriza a falha de localizacao sobre o registro offline', () => {
     const decisao = decidirStatus({
       geocerca: fora,
       metodoBiometrico: 'NENHUM',

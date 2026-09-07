@@ -37,15 +37,16 @@ const SENHA_ADMIN = 'admin123';
 
 /**
  * Endereco oficial: R. Humberto de Almeida Francklin, 217, Universitario,
- * Sao Mateus - ES, 29933-415. Coordenadas conferidas por geocodificacao
- * reversa (OpenStreetMap) sobre o endereco informado pela gestao — a marcacao
- * do OSM para "Centro Universitario Vale do Cricare - Univc" cai neste mesmo
- * numero da rua, o que confirma o ponto.
+ * Sao Mateus - ES, 29933-415. Coordenada tomada do Plus Code (Open Location
+ * Code) informado pela gestao, "75G3+VW Universitario, Sao Mateus - ES",
+ * decodificado com a biblioteca oficial `open-location-code`. Confirmada por
+ * uma segunda referencia independente (18°43'22.36"S 39°50'42.02"W, tambem
+ * fornecida pela gestao): as duas batem entre si com 20 m de diferenca.
  */
 const CAMPUS_UNIVC = {
   nome: 'Campus Sao Mateus - UNIVC',
-  latitudeCentral: -18.722385,
-  longitudeCentral: -39.844867,
+  latitudeCentral: -18.7228125,
+  longitudeCentral: -39.8451875,
   raioPermitidoMetros: 300,
 };
 

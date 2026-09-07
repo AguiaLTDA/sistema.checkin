@@ -41,21 +41,33 @@ Monorepo com npm workspaces:
 ```
 sistema.checkin/
 ├── apps/
-│   ├── api/          @univc/api        Fastify + Prisma + PostgreSQL
-│   ├── dashboard/    @univc/dashboard  React + Vite + Tailwind (RH/coordenação)
-│   └── mobile/       app Expo (React Native) — professores
+│   ├── api/            @univc/api            Fastify + Prisma + PostgreSQL
+│   ├── dashboard/      @univc/dashboard      React + Vite + Tailwind (RH/coordenação)
+│   ├── professor-web/  @univc/professor-web  React + Vite (professores, no navegador)
+│   └── mobile/         app Expo (React Native) — professores, alternativa nativa
 ├── packages/
 │   └── shared/       @univc/shared     enums, schemas zod e tipos da API
 ├── docker/           init do Postgres
 └── docker-compose.yml
 ```
 
-| Camada    | Stack                                                                 |
-| --------- | --------------------------------------------------------------------- |
-| API       | Node 22, TypeScript, Fastify 5, Prisma 6, PostgreSQL 16, zod, JWT      |
-| Dashboard | React 19, Vite, Tailwind 4, React Router                              |
-| Mobile    | Expo SDK 57, React Native 0.86, `expo-location`                       |
-| Testes    | Vitest (unitários puros + integração contra Postgres real)            |
+| Camada          | Stack                                                                 |
+| --------------- | --------------------------------------------------------------------- |
+| API             | Node 22, TypeScript, Fastify 5, Prisma 6, PostgreSQL 16, zod, JWT      |
+| Dashboard       | React 19, Vite, Tailwind 4, React Router (RH/coordenação)              |
+| App do professor | React 19, Vite, Tailwind 4 — roda no navegador, usa a Geolocation API do próprio aparelho |
+| Mobile (Expo)   | Expo SDK 57, React Native 0.86, `expo-location` — alternativa nativa ao app web |
+| Testes          | Vitest (unitários puros + integração contra Postgres real)            |
+
+**Por que existem duas versões do app do professor.** Desde que a validação do
+check-in passou a depender só da localização (sem biometria), o navegador
+consegue fazer tudo que o fluxo precisa — pedir a posição com a
+[Geolocation API](https://developer.mozilla.org/docs/Web/API/Geolocation_API)
+e chamar a mesma API. `apps/professor-web` é essa versão: um link, sem
+instalação, sem loja de aplicativos. `apps/mobile` continua existindo como
+alternativa nativa (ícone na tela inicial, notificações no futuro, fila
+offline já implementada) para quando isso for necessário — veja
+[Rodando o app no Expo Go](#rodando-o-app-no-expo-go).
 
 **`apps/mobile` fica fora dos workspaces de propósito.** O Metro (bundler do
 React Native) não lida bem com dependências içadas por symlink para a raiz do
@@ -126,6 +138,18 @@ npm run dev:dashboard       # http://localhost:5173
 > A API só aceita as origens listadas em `CORS_ORIGINS` no `.env`. A porta 5173
 > já está liberada; se mudar a porta do Vite, acrescente a nova origem lá.
 
+### 5. App do professor (web)
+
+Também roda direto pelo Vite, fora do compose:
+
+```bash
+npm run dev:professor-web   # http://localhost:5174
+```
+
+> Mesma observação do dashboard: a porta 5174 precisa estar em `CORS_ORIGINS`.
+> Pedir localização (`navigator.geolocation`) exige contexto seguro — `http://localhost`
+> conta como seguro para isso, então funciona em dev sem HTTPS.
+
 ### Comandos úteis
 
 | Comando                 | O que faz                                            |
@@ -184,20 +208,21 @@ Supabase). O [`render.yaml`](render.yaml) na raiz descreve dois serviços:
 
 ## Deploy na VPS
 
-Alternativa ao Render: rodar a API e o dashboard em containers Docker numa
-VPS própria, atrás de um Caddy que já esteja publicando outros serviços na
-mesma máquina (é o caso da VPS de referência deste projeto, que também roda
-o `agente-univc`). O banco continua sendo o Supabase externo — este compose
-não sobe Postgres.
+Alternativa ao Render: rodar a API, o dashboard e o app do professor em
+containers Docker numa VPS própria, atrás de um Caddy que já esteja
+publicando outros serviços na mesma máquina (é o caso da VPS de referência
+deste projeto, que também roda o `agente-univc`). O banco continua sendo o
+Supabase externo — este compose não sobe Postgres.
 
 **Arquivos relevantes:**
 
-| Arquivo                        | Papel                                                          |
-| ------------------------------- | --------------------------------------------------------------- |
-| `docker-compose.prod.yml`       | Sobe `checkin-api` e `checkin-web` (dashboard buildado), sem publicar portas no host — só ficam visíveis na rede Docker compartilhada |
-| `apps/dashboard/Dockerfile`     | Builda o dashboard (Vite) e serve o resultado por um Caddy interno, sem TLS |
-| `.env.production.example`       | Variáveis necessárias (copiar para `.env.production` e preencher) |
-| `deploy/vps/checkin.caddy`      | Blocos de site para o Caddy público existente encaminhar `checkin.*` e `api.*` até os containers |
+| Arquivo                          | Papel                                                          |
+| --------------------------------- | --------------------------------------------------------------- |
+| `docker-compose.prod.yml`         | Sobe `checkin-api`, `checkin-web` (dashboard) e `checkin-professor-web`, sem publicar portas no host — só ficam visíveis na rede Docker compartilhada |
+| `apps/dashboard/Dockerfile`       | Builda o dashboard (Vite) e serve o resultado por um Caddy interno, sem TLS |
+| `apps/professor-web/Dockerfile`   | Mesma ideia, para o app do professor |
+| `.env.production.example`         | Variáveis necessárias (copiar para `.env.production` e preencher) |
+| `deploy/vps/checkin.caddy`        | Blocos de site para o Caddy público existente encaminhar `checkin.*`, `professor.*` e `api.*` até os containers |
 
 ### Passo a passo
 
@@ -212,8 +237,9 @@ não sobe Postgres.
    ```bash
    cp .env.production.example .env.production
    # edite .env.production: DATABASE_URL (Supabase), JWT secrets
-   # (openssl rand -hex 32), CORS_ORIGINS e VITE_API_URL com o domínio
-   # público que a API e o dashboard vão usar.
+   # (openssl rand -hex 32), CORS_ORIGINS (uma origem por app, separadas por
+   # vírgula: dashboard E app do professor) e VITE_API_URL com o domínio
+   # público da API.
    ```
 3. Suba os containers (a rede `agente-univc_runtime` precisa já existir —
    é criada pelo Caddy público compartilhado):
@@ -233,16 +259,18 @@ não sobe Postgres.
    ```bash
    curl https://api.<seu-host>/health
    ```
-   e abra `https://checkin.<seu-host>` no navegador.
+   e abra `https://checkin.<seu-host>` (RH) e `https://professor.<seu-host>`
+   (professores) no navegador.
 
 > **Domínio próprio depois**: o `deploy/vps/checkin.caddy` de referência usa
 > um subdomínio [sslip.io](https://sslip.io) (`algo.<ip-com-tracos>.sslip.io`),
 > que já resolve para o IP da VPS sem precisar configurar DNS — é o mesmo
 > esquema usado pelos outros serviços dessa VPS. Para trocar por um domínio
-> próprio, troque os dois hostnames no arquivo, aponte os registros A do
+> próprio, troque os três hostnames no arquivo, aponte os registros A do
 > domínio pro IP da VPS, reaplique o passo 4 e atualize `CORS_ORIGINS` e
 > `VITE_API_URL` no `.env.production` (o segundo exige reconstruir o
-> `checkin-web`, já que o Vite embute a URL da API em tempo de build).
+> `checkin-web` e o `checkin-professor-web`, já que o Vite embute a URL da
+> API em tempo de build).
 
 ---
 

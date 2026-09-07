@@ -50,6 +50,19 @@ services:
     networks:
       - publico
 
+  checkin-professor-web:
+    build:
+      context: .
+      dockerfile: apps/professor-web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    container_name: checkin-professor-web
+    restart: unless-stopped
+    depends_on:
+      - checkin-api
+    networks:
+      - publico
+
 networks:
   # Rede do Caddy publico compartilhado (agente-univc). Os dois containers
   # entram nela so para o Caddy conseguir alcancar `checkin-api` e

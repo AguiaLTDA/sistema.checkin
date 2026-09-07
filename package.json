@@ -7,7 +7,8 @@
   "workspaces": [
     "packages/*",
     "apps/api",
-    "apps/dashboard"
+    "apps/dashboard",
+    "apps/professor-web"
   ],
   "engines": {
     "node": ">=20"
@@ -16,6 +17,7 @@
     "build:shared": "npm run build -w @univc/shared",
     "dev:api": "npm run dev -w @univc/api",
     "dev:dashboard": "npm run dev -w @univc/dashboard",
+    "dev:professor-web": "npm run dev -w @univc/professor-web",
     "dev:mobile": "npm start --prefix apps/mobile",
     "db:migrate": "npm run db:migrate -w @univc/api",
     "db:seed": "npm run db:seed -w @univc/api",

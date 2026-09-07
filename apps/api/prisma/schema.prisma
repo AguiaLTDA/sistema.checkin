@@ -32,6 +32,8 @@ enum AcaoAuditoria {
   TENTATIVA_CHECKIN
   APROVACAO_MANUAL
   REJEICAO_MANUAL
+  REDEFINICAO_SENHA
+  ALTERACAO_SENHA
 }
 
 enum ResultadoAuditoria {
@@ -46,6 +48,11 @@ model Professor {
   cpf            String   @unique @db.VarChar(11)
   email          String   @unique @db.VarChar(160)
   senhaHash      String   @map("senha_hash")
+  /// true logo depois que o RH redefine a senha (ver PATCH
+  /// /admin/professores/:id/redefinir-senha): o professor consegue logar com a
+  /// senha temporaria, mas fica preso na tela de troca ate escolher uma nova
+  /// em PATCH /auth/senha.
+  deveTrocarSenha Boolean @default(false) @map("deve_trocar_senha")
   cursoVinculado String   @map("curso_vinculado") @db.VarChar(120)
   ativo          Boolean  @default(true)
   createdAt      DateTime @default(now()) @map("created_at")

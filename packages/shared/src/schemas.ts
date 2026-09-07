@@ -41,6 +41,22 @@ export const refreshBodySchema = z.object({
 });
 export type RefreshBody = z.infer<typeof refreshBodySchema>;
 
+/**
+ * Corpo do PATCH /auth/senha. Exige a senha atual (a temporaria, no primeiro
+ * acesso depois de um reset do RH, ou a de sempre numa troca voluntaria) para
+ * confirmar que quem esta trocando e o proprio dono da conta.
+ */
+export const alterarSenhaBodySchema = z
+  .object({
+    senha_atual: z.string().min(6, 'senha_atual deve ter ao menos 6 caracteres'),
+    senha_nova: z.string().min(6, 'senha_nova deve ter ao menos 6 caracteres'),
+  })
+  .refine((dados) => dados.senha_nova !== dados.senha_atual, {
+    message: 'senha_nova deve ser diferente da senha_atual',
+    path: ['senha_nova'],
+  });
+export type AlterarSenhaBody = z.infer<typeof alterarSenhaBodySchema>;
+
 // ---------------------------------------------------------------------------
 // Check-in
 // ---------------------------------------------------------------------------

@@ -15,6 +15,8 @@ export interface UsuarioAutenticado {
   email: string;
   papel: 'PROFESSOR' | 'ADMIN';
   curso_vinculado?: string;
+  /** true logo depois que o RH redefine a senha; forca a troca antes de usar o app. */
+  deve_trocar_senha?: boolean;
 }
 
 export interface RespostaLogin {

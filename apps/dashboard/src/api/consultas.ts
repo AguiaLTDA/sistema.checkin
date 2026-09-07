@@ -34,6 +34,15 @@ export function listarProfessores(): Promise<{ dados: ProfessorResumo[] }> {
   return requisitar('/admin/professores');
 }
 
+/** Gera uma senha temporaria para o professor e marca troca obrigatoria. */
+export function redefinirSenhaProfessor(
+  id: string,
+): Promise<{ senha_temporaria: string }> {
+  return requisitar(`/admin/professores/${id}/redefinir-senha`, {
+    metodo: 'PATCH',
+  });
+}
+
 export function listarCursos(): Promise<{ dados: string[] }> {
   return requisitar('/admin/cursos');
 }

@@ -9,6 +9,7 @@ import { CORES } from './src/lib/formato';
 import { HistoricoTela } from './src/telas/HistoricoTela';
 import { LoginTela } from './src/telas/LoginTela';
 import { PrincipalTela } from './src/telas/PrincipalTela';
+import { TrocarSenhaTela } from './src/telas/TrocarSenhaTela';
 
 type Rotas = {
   Principal: undefined;
@@ -29,6 +30,7 @@ function Navegacao() {
   }
 
   if (!usuario) return <LoginTela />;
+  if (usuario.deve_trocar_senha) return <TrocarSenhaTela />;
 
   return (
     <NavigationContainer>

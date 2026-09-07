@@ -5,6 +5,7 @@ const ABAS = [
   { para: '/registros', rotulo: 'Registros' },
   { para: '/pendentes', rotulo: 'Aprovacoes pendentes' },
   { para: '/jornada', rotulo: 'Relatorio de jornada' },
+  { para: '/professores', rotulo: 'Professores' },
 ];
 
 export function Layout() {

@@ -21,6 +21,7 @@ import {
   type RegistroJornada,
 } from '../lib/jornada.js';
 import { registroParaDTO } from '../lib/serializar.js';
+import { gerarHashSenha, gerarSenhaTemporaria } from '../lib/senha.js';
 import { validar } from '../lib/validacao.js';
 import { exigirAdmin, usuarioAutenticado } from '../plugins/autenticacao.js';
 import { prisma } from '../prisma.js';
@@ -200,6 +201,49 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
         ativo: professor.ativo,
       })),
     });
+  });
+
+  /**
+   * Redefine a senha de um professor (esqueceu a senha, ou primeiro acesso).
+   * Gera uma senha temporaria legivel e devolve em texto puro UMA VEZ, nesta
+   * resposta — o RH repassa ao professor por fora do sistema (nada disso fica
+   * gravado, so o hash). O professor fica marcado com `deve_trocar_senha` e
+   * so escolhe a senha definitiva em PATCH /auth/senha, no proprio primeiro
+   * login. Sessoes anteriores sao revogadas: um reset costuma acontecer
+   * porque a conta pode ter sido comprometida, entao nao faz sentido deixar
+   * um refresh token antigo continuar valendo.
+   */
+  app.patch('/admin/professores/:id/redefinir-senha', async (request, reply) => {
+    const admin = usuarioAutenticado(request);
+    const { id } = validar(idParamSchema, request.params, 'parametros');
+
+    const professor = await prisma.professor.findUnique({ where: { id } });
+    if (!professor) throw erroNaoEncontrado('Professor nao encontrado.');
+
+    const senhaTemporaria = gerarSenhaTemporaria();
+
+    await prisma.$transaction([
+      prisma.professor.update({
+        where: { id },
+        data: {
+          senhaHash: await gerarHashSenha(senhaTemporaria),
+          deveTrocarSenha: true,
+        },
+      }),
+      prisma.refreshToken.updateMany({
+        where: { professorId: id, revogadoEm: null },
+        data: { revogadoEm: new Date() },
+      }),
+    ]);
+
+    await registrarAuditoria(request, {
+      acao: 'REDEFINICAO_SENHA',
+      resultado: 'SUCESSO',
+      adminId: admin.id,
+      professorId: id,
+    });
+
+    return reply.send({ senha_temporaria: senhaTemporaria });
   });
 
   /** Cursos distintos com professor cadastrado. */

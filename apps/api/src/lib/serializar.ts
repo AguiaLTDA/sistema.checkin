@@ -50,6 +50,7 @@ export function professorParaUsuario(professor: Professor): UsuarioAutenticado {
     email: professor.email,
     papel: 'PROFESSOR',
     curso_vinculado: professor.cursoVinculado,
+    deve_trocar_senha: professor.deveTrocarSenha,
   };
 }
 

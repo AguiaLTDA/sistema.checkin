@@ -382,9 +382,31 @@ Base: `http://localhost:3333`. Payloads em `snake_case`, validados com zod.
 | `POST` | `/auth/refresh`     | troca o refresh token (rotaciona e revoga o antigo) |
 | `POST` | `/auth/logout`      | revoga o refresh token                         |
 | `GET`  | `/auth/me`          | dados do professor autenticado                 |
+| `PATCH` | `/auth/senha`      | professor troca a própria senha (exige a atual) |
 
 Access token JWT de 15 min; refresh token de 7 dias, guardado no banco **apenas
 como hash SHA-256** e rotacionado a cada uso.
+
+#### Esqueci minha senha / primeiro acesso
+
+Não existe fluxo de autoatendimento por e-mail — o reset é sempre iniciado
+pelo RH:
+
+1. RH chama `PATCH /admin/professores/:id/redefinir-senha` (dashboard → aba
+   **Professores** → **Redefinir senha**). A API gera uma senha temporária
+   legível e devolve em texto puro **uma única vez**, nessa resposta — nada
+   disso é gravado, só o hash. O RH repassa ao professor por fora do sistema
+   (telefone, presencial etc.).
+2. O professor loga normalmente com a senha temporária. A resposta de login
+   vem com `usuario.deve_trocar_senha: true`, e os três apps (dashboard não,
+   só os do professor: mobile e web) bloqueiam o uso normal e mostram uma
+   tela de troca obrigatória até isso resolver.
+3. O professor chama `PATCH /auth/senha` informando a senha temporária como
+   `senha_atual` e a nova como `senha_nova`. A partir daí `deve_trocar_senha`
+   volta a `false` e ele usa a senha que escolheu.
+
+Redefinir a senha também revoga todos os refresh tokens ativos daquele
+professor — sessões antigas em outros aparelhos precisam logar de novo.
 
 ### Professor
 
@@ -420,6 +442,7 @@ funcionando — o campo é simplesmente ignorado.
 | `PATCH` | `/admin/registros/:id/rejeitar`   | rejeita um pendente (idem)                          |
 | `GET`   | `/admin/relatorio-jornada`        | pares chegada/saída, horas e inconsistências        |
 | `GET`   | `/admin/professores`              | lista para os filtros do dashboard                  |
+| `PATCH` | `/admin/professores/:id/redefinir-senha` | gera senha temporária e força troca no próximo login |
 | `GET`   | `/admin/cursos`                   | cursos distintos                                    |
 | `GET`   | `/admin/campi`                    | campi cadastrados                                   |
 
@@ -530,7 +553,7 @@ npm run test:unit -w @univc/api       # só unitários (não precisam de banco)
 npm run test:integration -w @univc/api
 ```
 
-**53 testes**, divididos em:
+**61 testes**, divididos em:
 
 - `tests/unit/geo.test.ts` — Haversine (distância conhecida, simetria,
   antimeridiano, antípodas) e a geocerca (borda do raio, escolha do campus mais
@@ -546,6 +569,10 @@ npm run test:integration -w @univc/api
   com app antigo que ainda envie `metodo_biometrico`, sequência inválida, fila
   offline, auditoria, histórico, aprovação manual pelo RH e bloqueio de professor
   em rota de admin.
+- `tests/integration/senha.test.ts` — RH redefine a senha de um professor
+  (senha temporária de uso único, `deve_trocar_senha`, revogação dos refresh
+  tokens ativos), professor troca a própria senha (`PATCH /auth/senha`,
+  exige a senha atual), e o fluxo completo de ponta a ponta.
 
 Os testes de integração usam `DATABASE_URL_TEST` (banco separado, truncado a
 cada teste) e **se marcam como pulados** se o Postgres não estiver no ar, para

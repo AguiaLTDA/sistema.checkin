@@ -43,6 +43,10 @@ export const sessao = {
     localStorage.setItem(CHAVE_REFRESH, resposta.refresh_token);
     localStorage.setItem(CHAVE_USUARIO, JSON.stringify(resposta.usuario));
   },
+  /** Atualiza so os dados do usuario (ex.: depois de trocar a senha), sem mexer nos tokens. */
+  atualizarUsuario(usuario: RespostaLogin['usuario']) {
+    localStorage.setItem(CHAVE_USUARIO, JSON.stringify(usuario));
+  },
   limpar() {
     localStorage.removeItem(CHAVE_ACCESS);
     localStorage.removeItem(CHAVE_REFRESH);
@@ -140,6 +144,21 @@ export async function entrar(email: string, senha: string): Promise<RespostaLogi
   });
   sessao.salvar(resposta);
   return resposta;
+}
+
+export async function alterarSenha(
+  senhaAtual: string,
+  senhaNova: string,
+): Promise<RespostaLogin['usuario']> {
+  const resposta = await requisitar<{ usuario: RespostaLogin['usuario'] }>(
+    '/auth/senha',
+    {
+      metodo: 'PATCH',
+      corpo: { senha_atual: senhaAtual, senha_nova: senhaNova },
+    },
+  );
+  sessao.atualizarUsuario(resposta.usuario);
+  return resposta.usuario;
 }
 
 export async function sair(): Promise<void> {

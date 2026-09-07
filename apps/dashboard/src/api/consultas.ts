@@ -38,8 +38,12 @@ export function listarProfessores(): Promise<{ dados: ProfessorResumo[] }> {
 export function redefinirSenhaProfessor(
   id: string,
 ): Promise<{ senha_temporaria: string }> {
+  // corpo: {} (nao undefined) para o fetch mandar Content-Type: application/json —
+  // sem isso o navegador manda Content-Length: 0 sem content-type, e o Fastify
+  // recusa com 415 (o corpo vazio, sem tipo declarado, nao casa com nenhum parser).
   return requisitar(`/admin/professores/${id}/redefinir-senha`, {
     metodo: 'PATCH',
+    corpo: {},
   });
 }
 

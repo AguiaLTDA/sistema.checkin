@@ -408,6 +408,22 @@ pelo RH:
 Redefinir a senha também revoga todos os refresh tokens ativos daquele
 professor — sessões antigas em outros aparelhos precisam logar de novo.
 
+#### Gestão de professores pelo RH
+
+O dashboard (aba **Professores**) cobre o ciclo completo do cadastro, sem
+precisar de `prisma studio`:
+
+- **Cadastrar** — nome, CPF, email e curso. Uma senha temporária é gerada na
+  hora (mesma mecânica do reset) e o professor é obrigado a trocá-la no
+  primeiro login.
+- **Editar** — nome, CPF, email e curso, a qualquer momento.
+- **Ativar/Desativar** — desliga o acesso sem apagar o histórico.
+- **Apagar** — remove o professor definitivamente, e os registros de ponto
+  dele saem junto (cascade no schema). Ação irreversível, com confirmação.
+
+Toda criação, edição e exclusão gera uma entrada em `logs_auditoria`
+(`CRIACAO_PROFESSOR`, `EDICAO_PROFESSOR`, `EXCLUSAO_PROFESSOR`).
+
 ### Professor
 
 | Método | Rota                  | Descrição                                       |
@@ -441,7 +457,10 @@ funcionando — o campo é simplesmente ignorado.
 | `PATCH` | `/admin/registros/:id/aprovar`    | aprova um pendente (`justificativa_manual` obrigatória) |
 | `PATCH` | `/admin/registros/:id/rejeitar`   | rejeita um pendente (idem)                          |
 | `GET`   | `/admin/relatorio-jornada`        | pares chegada/saída, horas e inconsistências        |
-| `GET`   | `/admin/professores`              | lista para os filtros do dashboard                  |
+| `GET`   | `/admin/professores`              | lista para os filtros e a tela de gestão do dashboard |
+| `POST`  | `/admin/professores`              | cadastra um professor novo (gera senha temporária, força troca no primeiro login) |
+| `PATCH` | `/admin/professores/:id`          | edita nome/CPF/email/curso/ativo de um professor    |
+| `DELETE`| `/admin/professores/:id`          | apaga definitivamente um professor (e os registros de ponto dele, em cascata) |
 | `PATCH` | `/admin/professores/:id/redefinir-senha` | gera senha temporária e força troca no próximo login |
 | `GET`   | `/admin/cursos`                   | cursos distintos                                    |
 | `GET`   | `/admin/campi`                    | campi cadastrados                                   |
@@ -553,7 +572,7 @@ npm run test:unit -w @univc/api       # só unitários (não precisam de banco)
 npm run test:integration -w @univc/api
 ```
 
-**61 testes**, divididos em:
+**73 testes**, divididos em:
 
 - `tests/unit/geo.test.ts` — Haversine (distância conhecida, simetria,
   antimeridiano, antípodas) e a geocerca (borda do raio, escolha do campus mais
@@ -573,6 +592,11 @@ npm run test:integration -w @univc/api
   (senha temporária de uso único, `deve_trocar_senha`, revogação dos refresh
   tokens ativos), professor troca a própria senha (`PATCH /auth/senha`,
   exige a senha atual), e o fluxo completo de ponta a ponta.
+- `tests/integration/professores.test.ts` — RH cadastra, edita, ativa/desativa
+  e apaga professores (`POST`/`PATCH`/`DELETE /admin/professores[/:id]`):
+  conflito de email/CPF duplicado, validação de CPF, 404 para id inexistente,
+  bloqueio de professor tentando usar as rotas, e a exclusão em cascata dos
+  registros de ponto.
 
 Os testes de integração usam `DATABASE_URL_TEST` (banco separado, truncado a
 cada teste) e **se marcam como pulados** se o Postgres não estiver no ar, para
@@ -623,5 +647,5 @@ Por decisão do escopo, **não** estão implementados:
   presença é comprovada só por localização (ver a seção de LGPD);
 - totens físicos de ponto (fase 2);
 - infraestrutura de produção/cloud, CI/CD, observabilidade;
-- cadastro de professores e campi pela interface — hoje via seed ou
-  `npx prisma studio`.
+- cadastro de campi pela interface — hoje via seed ou `npx prisma studio`
+  (professores já têm CRUD completo no dashboard, aba **Professores**).

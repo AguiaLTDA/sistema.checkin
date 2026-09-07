@@ -80,7 +80,7 @@ const PROFESSORES = [
 ] as const;
 
 const ADMIN = {
-  nome: 'Rejane Ferreira (RH)',
+  nome: 'RH UNIVC',
   email: 'rh@univc.br',
 };
 

@@ -144,3 +144,35 @@ export type RelatorioJornadaQuery = z.infer<typeof relatorioJornadaQuerySchema>;
 export const idParamSchema = z.object({
   id: z.string().uuid('id invalido'),
 });
+
+export const cpfSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{11}$/, 'cpf deve conter 11 digitos numericos');
+
+/** Corpo do POST /admin/professores (cadastro de um novo professor pelo RH). */
+export const professorCriarBodySchema = z.object({
+  nome: z.string().trim().min(3, 'nome deve ter ao menos 3 caracteres').max(160),
+  cpf: cpfSchema,
+  email: z.string().trim().toLowerCase().email('email invalido'),
+  curso_vinculado: z
+    .string()
+    .trim()
+    .min(1, 'curso_vinculado e obrigatorio')
+    .max(120),
+});
+export type ProfessorCriarBody = z.infer<typeof professorCriarBodySchema>;
+
+/** Corpo do PATCH /admin/professores/:id (edicao de cadastro pelo RH). */
+export const professorEditarBodySchema = z
+  .object({
+    nome: z.string().trim().min(3, 'nome deve ter ao menos 3 caracteres').max(160).optional(),
+    cpf: cpfSchema.optional(),
+    email: z.string().trim().toLowerCase().email('email invalido').optional(),
+    curso_vinculado: z.string().trim().min(1).max(120).optional(),
+    ativo: z.boolean().optional(),
+  })
+  .refine((dados) => Object.keys(dados).length > 0, {
+    message: 'Informe ao menos um campo para atualizar.',
+  });
+export type ProfessorEditarBody = z.infer<typeof professorEditarBodySchema>;

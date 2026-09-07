@@ -36,13 +36,16 @@ const SENHA_PROFESSOR = 'senha123';
 const SENHA_ADMIN = 'admin123';
 
 /**
- * Coordenadas aproximadas do campus da UNIVC em Sao Mateus/ES. Ajuste em
- * `campi` (ou pelo Prisma Studio) para a posicao exata antes de usar em campo.
+ * Endereco oficial: R. Humberto de Almeida Francklin, 217, Universitario,
+ * Sao Mateus - ES, 29933-415. Coordenadas conferidas por geocodificacao
+ * reversa (OpenStreetMap) sobre o endereco informado pela gestao — a marcacao
+ * do OSM para "Centro Universitario Vale do Cricare - Univc" cai neste mesmo
+ * numero da rua, o que confirma o ponto.
  */
 const CAMPUS_UNIVC = {
   nome: 'Campus Sao Mateus - UNIVC',
-  latitudeCentral: -18.70046,
-  longitudeCentral: -39.86322,
+  latitudeCentral: -18.722385,
+  longitudeCentral: -39.844867,
   raioPermitidoMetros: 300,
 };
 

@@ -18,3 +18,6 @@ yarn-error.log*
 
 # Prisma
 apps/api/prisma/*.db
+
+# Backups locais do banco (dados de demonstracao, nao versionar)
+backups/

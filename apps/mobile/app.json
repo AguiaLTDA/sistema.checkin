@@ -11,8 +11,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "br.univc.checkin",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "O app usa sua localizacao no momento do registro para confirmar que voce esta no campus. A posicao so e lida quando voce toca em marcar chegada ou saida.",
-        "NSFaceIDUsageDescription": "A biometria confirma que e voce quem esta registrando o ponto. A validacao acontece no proprio aparelho: nenhuma imagem ou digital sai do celular."
+        "NSLocationWhenInUseUsageDescription": "O app usa sua localizacao no momento do registro para confirmar que voce esta no campus. A posicao so e lida quando voce toca em marcar chegada ou saida."
       }
     },
     "android": {
@@ -26,9 +25,7 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "USE_BIOMETRIC",
-        "USE_FINGERPRINT"
+        "ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -39,12 +36,6 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "O app usa sua localizacao no momento do registro para confirmar que voce esta no campus."
-        }
-      ],
-      [
-        "expo-local-authentication",
-        {
-          "faceIDPermission": "A biometria confirma sua identidade no proprio aparelho, sem enviar dado biometrico para o servidor."
         }
       ]
     ]

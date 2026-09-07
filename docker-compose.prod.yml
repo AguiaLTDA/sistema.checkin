@@ -1,0 +1,72 @@
+# Compose de producao do UNIVC Check-in.
+#
+# Nao inclui banco (o Postgres e o Supabase, externo) nem proxy TLS: este
+# projeto so sobe a API e o dashboard buildado, e se conecta a uma rede
+# Docker externa onde ja existe um Caddy publico fazendo HTTPS + reverse
+# proxy (ver README, secao "Deploy na VPS", e deploy/vps/).
+#
+# Uso:
+#   cp .env.production.example .env.production
+#   # edite .env.production com os valores reais
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+
+services:
+  checkin-api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: checkin-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      API_PORT: 3333
+      API_HOST: 0.0.0.0
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      CHECKIN_RATE_LIMIT_MAX: ${CHECKIN_RATE_LIMIT_MAX:-10}
+      CHECKIN_RATE_LIMIT_WINDOW: ${CHECKIN_RATE_LIMIT_WINDOW:-1 minute}
+      RELATORIO_TIMEZONE: ${RELATORIO_TIMEZONE:-America/Sao_Paulo}
+      # Aplica migrations no boot (idempotente); NUNCA popula dados de
+      # demonstracao em producao.
+      RUN_MIGRATIONS_ON_BOOT: "true"
+      RUN_SEED_ON_BOOT: "false"
+    networks:
+      - publico
+
+  checkin-web:
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    container_name: checkin-web
+    restart: unless-stopped
+    depends_on:
+      - checkin-api
+    networks:
+      - publico
+
+  checkin-professor-web:
+    build:
+      context: .
+      dockerfile: apps/professor-web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    container_name: checkin-professor-web
+    restart: unless-stopped
+    depends_on:
+      - checkin-api
+    networks:
+      - publico
+
+networks:
+  # Rede do Caddy publico compartilhado (agente-univc). Os dois containers
+  # entram nela so para o Caddy conseguir alcancar `checkin-api` e
+  # `checkin-web` pelo nome; nenhuma porta e publicada no host.
+  publico:
+    name: agente-univc_runtime
+    external: true

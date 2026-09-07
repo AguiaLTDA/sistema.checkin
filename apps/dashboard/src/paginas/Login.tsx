@@ -30,7 +30,8 @@ export function Login() {
   return (
     <div className="flex min-h-full items-center justify-center bg-univc-900 px-4 py-12">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-        <h1 className="text-xl font-semibold text-slate-900">UNIVC Check-in</h1>
+        <img src="/logo-univc.png" alt="UNIVC" className="h-12" />
+        <h1 className="mt-4 text-xl font-semibold text-slate-900">Check-in</h1>
         <p className="mt-1 text-sm text-slate-500">
           Acesso do RH e da coordenacao ao controle de presenca docente.
         </p>

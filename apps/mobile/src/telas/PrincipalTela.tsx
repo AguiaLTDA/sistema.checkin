@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -16,16 +16,10 @@ import {
 import { Aviso, Botao, Cartao, EtiquetaStatus } from '../componentes/ui';
 import { useAuth } from '../contexto/AuthContext';
 import { useFilaOffline } from '../contexto/FilaOfflineContext';
-import {
-  autenticarBiometria,
-  obterLocalizacao,
-  verificarBiometria,
-} from '../lib/dispositivo';
+import { obterLocalizacao } from '../lib/dispositivo';
 import { CORES, formatarDataHora, formatarDistancia } from '../lib/formato';
-import type { MetodoBiometrico, RegistroPontoDTO, TipoRegistro } from '../tipos';
+import type { RegistroPontoDTO, TipoRegistro } from '../tipos';
 
-const MAXIMO_TENTATIVAS_BIOMETRIA = 3;
-const BLOQUEIO_SEGUNDOS = 60;
 const CHAVE_PROXIMO_TIPO = 'univc.proximo_tipo';
 
 type Retorno =
@@ -42,28 +36,6 @@ export function PrincipalTela({ irParaHistorico }: { irParaHistorico: () => void
   const [carregando, setCarregando] = useState(true);
   const [processando, setProcessando] = useState(false);
   const [retorno, setRetorno] = useState<Retorno>(null);
-  const [biometriaIndisponivel, setBiometriaIndisponivel] = useState<string | null>(
-    null,
-  );
-
-  const tentativasBiometria = useRef(0);
-  const [segundosBloqueado, setSegundosBloqueado] = useState(0);
-
-  // Contagem regressiva do bloqueio apos 3 falhas de biometria.
-  useEffect(() => {
-    if (segundosBloqueado <= 0) return;
-    const intervalo = setInterval(
-      () => setSegundosBloqueado((atual) => Math.max(0, atual - 1)),
-      1000,
-    );
-    return () => clearInterval(intervalo);
-  }, [segundosBloqueado]);
-
-  useEffect(() => {
-    void verificarBiometria().then((capacidade) =>
-      setBiometriaIndisponivel(capacidade.disponivel ? null : capacidade.motivo ?? null),
-    );
-  }, []);
 
   /**
    * Busca no servidor qual e o proximo registro esperado. O valor fica em cache
@@ -102,9 +74,14 @@ export function PrincipalTela({ irParaHistorico }: { irParaHistorico: () => void
     await AsyncStorage.setItem(CHAVE_PROXIMO_TIPO, proximo);
   }
 
-  /** Fluxo completo: localizacao -> biometria -> envio (ou fila offline). */
-  async function registrar(tipo: TipoRegistro, comBiometria = true) {
-    if (processando || segundosBloqueado > 0) return;
+  /**
+   * Fluxo completo: localizacao -> envio (ou fila offline).
+   *
+   * A localizacao e a unica prova de presenca do sistema; sem ela o registro
+   * nao acontece. Nao existe etapa de biometria.
+   */
+  async function registrar(tipo: TipoRegistro) {
+    if (processando) return;
 
     setRetorno(null);
     setProcessando(true);
@@ -116,42 +93,11 @@ export function PrincipalTela({ irParaHistorico }: { irParaHistorico: () => void
         return;
       }
 
-      let metodo: MetodoBiometrico = 'NENHUM';
-
-      if (comBiometria) {
-        const biometria = await autenticarBiometria(tipo);
-
-        if (!biometria.ok) {
-          tentativasBiometria.current += 1;
-          const restantes =
-            MAXIMO_TENTATIVAS_BIOMETRIA - tentativasBiometria.current;
-
-          if (restantes <= 0) {
-            tentativasBiometria.current = 0;
-            setSegundosBloqueado(BLOQUEIO_SEGUNDOS);
-            setRetorno({
-              tom: 'erro',
-              texto: `Biometria falhou ${MAXIMO_TENTATIVAS_BIOMETRIA} vezes. Aguarde ${BLOQUEIO_SEGUNDOS} segundos para tentar de novo.`,
-            });
-          } else {
-            setRetorno({
-              tom: 'atencao',
-              texto: `${biometria.mensagem} Voce ainda tem ${restantes} tentativa(s).`,
-            });
-          }
-          return;
-        }
-
-        tentativasBiometria.current = 0;
-        metodo = biometria.metodo;
-      }
-
       const corpo = {
         tipo,
         latitude: localizacao.posicao.latitude,
         longitude: localizacao.posicao.longitude,
         precisao_metros: localizacao.posicao.precisaoMetros,
-        metodo_biometrico: metodo,
       };
 
       try {
@@ -173,7 +119,6 @@ export function PrincipalTela({ irParaHistorico }: { irParaHistorico: () => void
             latitude: corpo.latitude,
             longitude: corpo.longitude,
             precisao_metros: corpo.precisao_metros,
-            metodo_biometrico: metodo,
             registrado_offline_em: new Date().toISOString(),
           });
           await alternarProximoTipo(tipo);
@@ -197,8 +142,6 @@ export function PrincipalTela({ irParaHistorico }: { irParaHistorico: () => void
       setProcessando(false);
     }
   }
-
-  const bloqueado = segundosBloqueado > 0;
 
   return (
     <ScrollView
@@ -240,32 +183,19 @@ export function PrincipalTela({ irParaHistorico }: { irParaHistorico: () => void
         </Cartao>
       )}
 
-      {biometriaIndisponivel && (
-        <Aviso tom="atencao">
-          {biometriaIndisponivel} Voce ainda pode registrar o ponto, mas ele ira
-          para aprovacao manual do RH.
-        </Aviso>
-      )}
-
       {retorno && <Aviso tom={retorno.tom}>{retorno.texto}</Aviso>}
-
-      {bloqueado && (
-        <Aviso tom="erro">
-          Novas tentativas liberadas em {segundosBloqueado}s.
-        </Aviso>
-      )}
 
       <View style={estilos.botoes}>
         <Botao
           titulo="Marcar chegada"
           aoTocar={() => void registrar('CHEGADA')}
-          desabilitado={proximoTipo !== 'CHEGADA' || bloqueado}
+          desabilitado={proximoTipo !== 'CHEGADA'}
           carregando={processando && proximoTipo === 'CHEGADA'}
         />
         <Botao
           titulo="Marcar saida"
           aoTocar={() => void registrar('SAIDA')}
-          desabilitado={proximoTipo !== 'SAIDA' || bloqueado}
+          desabilitado={proximoTipo !== 'SAIDA'}
           carregando={processando && proximoTipo === 'SAIDA'}
         />
         <Text style={estilos.dica}>
@@ -274,15 +204,6 @@ export function PrincipalTela({ irParaHistorico }: { irParaHistorico: () => void
             : 'Voce ja registrou a chegada. O proximo registro e a saida.'}
         </Text>
       </View>
-
-      {biometriaIndisponivel && (
-        <Botao
-          titulo="Registrar sem biometria (vai para o RH)"
-          variante="secundario"
-          aoTocar={() => void registrar(proximoTipo, false)}
-          desabilitado={processando || bloqueado}
-        />
-      )}
 
       {ultimo && (
         <Cartao>
@@ -305,9 +226,9 @@ export function PrincipalTela({ irParaHistorico }: { irParaHistorico: () => void
       />
 
       <Text style={estilos.rodape}>
-        A confirmacao biometrica acontece dentro do seu aparelho. O sistema
-        recebe apenas a informacao de que ela passou, junto da localizacao do
-        momento do registro.
+        O registro usa apenas a sua localizacao no momento em que voce toca no
+        botao, para confirmar que voce esta no campus. Nenhum dado biometrico e
+        lido ou enviado.
       </Text>
     </ScrollView>
   );

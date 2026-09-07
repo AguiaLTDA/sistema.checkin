@@ -1,5 +1,4 @@
 import type {
-  MetodoBiometrico,
   PapelUsuario,
   StatusRegistro,
   TipoInconsistencia,
@@ -20,6 +19,12 @@ export interface UsuarioAutenticado {
   papel: PapelUsuario;
   /** Presente apenas quando papel === 'PROFESSOR'. */
   curso_vinculado?: string;
+  /**
+   * true logo depois que o RH redefine a senha do professor. O app deve
+   * bloquear o uso normal e forcar a tela de troca (PATCH /auth/senha) ate
+   * isso virar false. So existe para papel === 'PROFESSOR'.
+   */
+  deve_trocar_senha?: boolean;
 }
 
 export interface RespostaLogin {
@@ -39,7 +44,6 @@ export interface RegistroPontoDTO {
   latitude: number;
   longitude: number;
   distancia_do_campus_metros: number;
-  metodo_biometrico: MetodoBiometrico;
   status: StatusRegistro;
   sincronizado_offline: boolean;
   justificativa_manual: string | null;

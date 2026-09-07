@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import type { RespostaLogin } from '@univc/shared';
-import { loginBodySchema, refreshBodySchema } from '@univc/shared';
+import { alterarSenhaBodySchema, loginBodySchema, refreshBodySchema } from '@univc/shared';
 import { registrarAuditoria } from '../lib/auditoria.js';
 import { erroNaoAutenticado } from '../lib/erros.js';
 import { adminParaUsuario, professorParaUsuario } from '../lib/serializar.js';
-import { HASH_FICTICIO, conferirSenha } from '../lib/senha.js';
+import { HASH_FICTICIO, conferirSenha, gerarHashSenha } from '../lib/senha.js';
 import {
   gerarAccessToken,
   gerarRefreshToken,
@@ -193,6 +193,53 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
 
     return reply.status(204).send();
   });
+
+  /**
+   * Professor troca a propria senha. Serve tanto a troca obrigatoria depois
+   * de um reset do RH (`deve_trocar_senha`) quanto uma troca voluntaria —
+   * exigir `senha_atual` nos dois casos confirma que quem esta trocando e o
+   * dono da conta, mesmo com o access token em maos.
+   */
+  app.patch(
+    '/auth/senha',
+    { preHandler: exigirProfessor },
+    async (request, reply) => {
+      const usuario = usuarioAutenticado(request);
+      const { senha_atual: senhaAtual, senha_nova: senhaNova } = validar(
+        alterarSenhaBodySchema,
+        request.body,
+      );
+
+      const professor = await prisma.professor.findUniqueOrThrow({
+        where: { id: usuario.id },
+      });
+
+      if (!(await conferirSenha(senhaAtual, professor.senhaHash))) {
+        await registrarAuditoria(request, {
+          acao: 'ALTERACAO_SENHA',
+          resultado: 'REJEITADO',
+          professorId: professor.id,
+        });
+        throw erroNaoAutenticado('Senha atual incorreta.');
+      }
+
+      const atualizado = await prisma.professor.update({
+        where: { id: professor.id },
+        data: {
+          senhaHash: await gerarHashSenha(senhaNova),
+          deveTrocarSenha: false,
+        },
+      });
+
+      await registrarAuditoria(request, {
+        acao: 'ALTERACAO_SENHA',
+        resultado: 'SUCESSO',
+        professorId: professor.id,
+      });
+
+      return reply.send({ usuario: professorParaUsuario(atualizado) });
+    },
+  );
 
   app.get(
     '/auth/me',

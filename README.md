@@ -1,18 +1,18 @@
+<p align="center">
+  <img src="branding/univc-horizontal.png" alt="UNIVC - Centro Universitário Vale do Cricaré" width="320">
+</p>
+
 # UNIVC Check-in
 
 Controle de presença de professores do **Centro Universitário Vale do Cricaré (UNIVC)**.
 
-O professor marca chegada e saída pelo celular, e o registro só é validado
-automaticamente quando dois fatores conferem:
+O professor marca chegada e saída pelo celular. **A localização é o único
+fator de validação**: o servidor calcula, por Haversine, a distância entre a
+posição enviada e o campus mais próximo e compara com o raio permitido daquele
+campus. Não há etapa de biometria em nenhum ponto do fluxo.
 
-1. **Geolocalização** — o servidor calcula, por Haversine, a distância entre a
-   posição enviada e o campus mais próximo, e compara com o raio permitido
-   daquele campus.
-2. **Biometria do aparelho** — Face ID ou digital, validados pelo próprio
-   sistema operacional do celular. Nenhum dado biométrico chega ao servidor.
-
-Registros fora do raio (ou sem biometria confirmada) não são descartados: entram
-como `PENDENTE_APROVACAO` e o RH decide, com justificativa obrigatória.
+Registros fora do raio não são descartados: entram como `PENDENTE_APROVACAO` e
+o RH decide, com justificativa obrigatória.
 
 ---
 
@@ -20,12 +20,14 @@ como `PENDENTE_APROVACAO` e o RH decide, com justificativa obrigatória.
 
 - [Arquitetura](#arquitetura)
 - [Subindo o ambiente](#subindo-o-ambiente)
+- [Deploy no Render](#deploy-no-render)
+- [Deploy na VPS](#deploy-na-vps)
 - [Usuários de teste](#usuários-de-teste)
 - [Rodando o app no Expo Go](#rodando-o-app-no-expo-go)
 - [Testando o fluxo completo](#testando-o-fluxo-completo)
 - [API](#api)
 - [Regras de negócio](#regras-de-negócio)
-- [LGPD e dados biométricos](#lgpd-e-dados-biométricos)
+- [LGPD e dados pessoais](#lgpd-e-dados-pessoais)
 - [Testes](#testes)
 - [Decisões de projeto](#decisões-de-projeto)
 - [Fora do escopo do MVP](#fora-do-escopo-do-mvp)
@@ -39,21 +41,33 @@ Monorepo com npm workspaces:
 ```
 sistema.checkin/
 ├── apps/
-│   ├── api/          @univc/api        Fastify + Prisma + PostgreSQL
-│   ├── dashboard/    @univc/dashboard  React + Vite + Tailwind (RH/coordenação)
-│   └── mobile/       app Expo (React Native) — professores
+│   ├── api/            @univc/api            Fastify + Prisma + PostgreSQL
+│   ├── dashboard/      @univc/dashboard      React + Vite + Tailwind (RH/coordenação)
+│   ├── professor-web/  @univc/professor-web  React + Vite (professores, no navegador)
+│   └── mobile/         app Expo (React Native) — professores, alternativa nativa
 ├── packages/
 │   └── shared/       @univc/shared     enums, schemas zod e tipos da API
 ├── docker/           init do Postgres
 └── docker-compose.yml
 ```
 
-| Camada    | Stack                                                                 |
-| --------- | --------------------------------------------------------------------- |
-| API       | Node 22, TypeScript, Fastify 5, Prisma 6, PostgreSQL 16, zod, JWT      |
-| Dashboard | React 19, Vite, Tailwind 4, React Router                              |
-| Mobile    | Expo SDK 57, React Native 0.86, `expo-location`, `expo-local-authentication` |
-| Testes    | Vitest (unitários puros + integração contra Postgres real)            |
+| Camada          | Stack                                                                 |
+| --------------- | --------------------------------------------------------------------- |
+| API             | Node 22, TypeScript, Fastify 5, Prisma 6, PostgreSQL 16, zod, JWT      |
+| Dashboard       | React 19, Vite, Tailwind 4, React Router (RH/coordenação)              |
+| App do professor | React 19, Vite, Tailwind 4 — roda no navegador, usa a Geolocation API do próprio aparelho |
+| Mobile (Expo)   | Expo SDK 57, React Native 0.86, `expo-location` — alternativa nativa ao app web |
+| Testes          | Vitest (unitários puros + integração contra Postgres real)            |
+
+**Por que existem duas versões do app do professor.** Desde que a validação do
+check-in passou a depender só da localização (sem biometria), o navegador
+consegue fazer tudo que o fluxo precisa — pedir a posição com a
+[Geolocation API](https://developer.mozilla.org/docs/Web/API/Geolocation_API)
+e chamar a mesma API. `apps/professor-web` é essa versão: um link, sem
+instalação, sem loja de aplicativos. `apps/mobile` continua existindo como
+alternativa nativa (ícone na tela inicial, notificações no futuro, fila
+offline já implementada) para quando isso for necessário — veja
+[Rodando o app no Expo Go](#rodando-o-app-no-expo-go).
 
 **`apps/mobile` fica fora dos workspaces de propósito.** O Metro (bundler do
 React Native) não lida bem com dependências içadas por symlink para a raiz do
@@ -124,6 +138,18 @@ npm run dev:dashboard       # http://localhost:5173
 > A API só aceita as origens listadas em `CORS_ORIGINS` no `.env`. A porta 5173
 > já está liberada; se mudar a porta do Vite, acrescente a nova origem lá.
 
+### 5. App do professor (web)
+
+Também roda direto pelo Vite, fora do compose:
+
+```bash
+npm run dev:professor-web   # http://localhost:5174
+```
+
+> Mesma observação do dashboard: a porta 5174 precisa estar em `CORS_ORIGINS`.
+> Pedir localização (`navigator.geolocation`) exige contexto seguro — `http://localhost`
+> conta como seguro para isso, então funciona em dev sem HTTPS.
+
 ### Comandos úteis
 
 | Comando                 | O que faz                                            |
@@ -134,6 +160,117 @@ npm run dev:dashboard       # http://localhost:5173
 | `npm test`              | suíte completa da API                                |
 | `npm run typecheck`     | typecheck de todos os workspaces                     |
 | `npm run docker:logs`   | logs da API no compose                               |
+
+---
+
+## Deploy no Render
+
+O banco continua sendo o Supabase (configurado à parte, direto no painel do
+Supabase). O [`render.yaml`](render.yaml) na raiz descreve dois serviços:
+
+| Serviço                    | Tipo        | O que serve                              |
+| --------------------------- | ----------- | ----------------------------------------- |
+| `univc-checkin-api`         | Web Service | API Fastify (`apps/api`)                  |
+| `univc-checkin-dashboard`   | Static Site | Dashboard React buildado (`apps/dashboard`) |
+
+### Passo a passo
+
+1. No Render, **New +** → **Blueprint**, aponte para este repositório e
+   selecione a branch (o blueprint já sugere `feat/checkin-somente-localizacao`).
+2. O Render vai criar os dois serviços a partir do `render.yaml`, mas algumas
+   variáveis ficam marcadas para preencher manualmente (`sync: false`) — o
+   painel pede isso durante a criação:
+   - **`univc-checkin-api`** → `DATABASE_URL`: connection string do **Session
+     pooler** do Supabase (Project Settings → Database → Connection string;
+     a conexão direta `db.<ref>.supabase.co` é IPv6-only e não funciona em
+     boa parte dos ambientes). `CORS_ORIGINS` pode ficar em branco por
+     enquanto — é ajustada no passo 4.
+   - **`univc-checkin-dashboard`** → `VITE_API_URL`: também deixe em branco
+     por enquanto.
+3. Deploy inicial: a API sobe (rodando `prisma migrate deploy` como parte do
+   build) e o dashboard builda, mas sem as URLs cruzadas o CORS ainda barra as
+   chamadas. Anote as duas URLs que o Render atribuiu, do tipo
+   `https://univc-checkin-api.onrender.com` e
+   `https://univc-checkin-dashboard.onrender.com`.
+4. Preencha as variáveis que faltaram e reimplante:
+   - `univc-checkin-api` → `CORS_ORIGINS` = URL do dashboard.
+   - `univc-checkin-dashboard` → `VITE_API_URL` = URL da API (variável só
+     entra no build do Vite, então precisa de um novo deploy do site estático
+     depois de mudar).
+5. Confirme com `curl https://<url-da-api>.onrender.com/health` e abrindo o
+   dashboard no navegador.
+
+> **Plano gratuito do Render**: o Web Service "dorme" após um período sem
+> tráfego e o primeiro request depois disso demora mais (cold start). Isso é
+> esperado e não indica problema na API.
+
+---
+
+## Deploy na VPS
+
+Alternativa ao Render: rodar a API, o dashboard e o app do professor em
+containers Docker numa VPS própria, atrás de um Caddy que já esteja
+publicando outros serviços na mesma máquina (é o caso da VPS de referência
+deste projeto, que também roda o `agente-univc`). O banco continua sendo o
+Supabase externo — este compose não sobe Postgres.
+
+**Arquivos relevantes:**
+
+| Arquivo                          | Papel                                                          |
+| --------------------------------- | --------------------------------------------------------------- |
+| `docker-compose.prod.yml`         | Sobe `checkin-api`, `checkin-web` (dashboard) e `checkin-professor-web`, sem publicar portas no host — só ficam visíveis na rede Docker compartilhada |
+| `apps/dashboard/Dockerfile`       | Builda o dashboard (Vite) e serve o resultado por um Caddy interno, sem TLS |
+| `apps/professor-web/Dockerfile`   | Mesma ideia, para o app do professor |
+| `.env.production.example`         | Variáveis necessárias (copiar para `.env.production` e preencher) |
+| `deploy/vps/checkin.caddy`        | Blocos de site para o Caddy público existente encaminhar `checkin.*`, `professor.*` e `api.*` até os containers |
+
+### Passo a passo
+
+1. **Na VPS**, clone o repositório em um diretório próprio (não dentro do
+   projeto que já está rodando):
+   ```bash
+   mkdir -p /opt/sistema-checkin && cd /opt/sistema-checkin
+   git clone --branch feat/checkin-somente-localizacao \
+     https://github.com/AguiaLTDA/sistema.checkin.git .
+   ```
+2. Configure as variáveis:
+   ```bash
+   cp .env.production.example .env.production
+   # edite .env.production: DATABASE_URL (Supabase), JWT secrets
+   # (openssl rand -hex 32), CORS_ORIGINS (uma origem por app, separadas por
+   # vírgula: dashboard E app do professor) e VITE_API_URL com o domínio
+   # público da API.
+   ```
+3. Suba os containers (a rede `agente-univc_runtime` precisa já existir —
+   é criada pelo Caddy público compartilhado):
+   ```bash
+   docker compose --env-file .env.production -f docker-compose.prod.yml \
+     up -d --build
+   ```
+4. **Publique os domínios** sem tocar no Caddyfile principal do Caddy
+   compartilhado: copie o bloco de site pra pasta de import dele e recarregue
+   a configuração (sem reiniciar o container, sem downtime pros outros
+   serviços que ele já publica):
+   ```bash
+   cp deploy/vps/checkin.caddy /opt/agente-univc/publicador/conf.d/checkin.caddy
+   docker exec univc-publicador caddy reload --config /etc/caddy/Caddyfile
+   ```
+5. Confira:
+   ```bash
+   curl https://api.<seu-host>/health
+   ```
+   e abra `https://checkin.<seu-host>` (RH) e `https://professor.<seu-host>`
+   (professores) no navegador.
+
+> **Domínio próprio depois**: o `deploy/vps/checkin.caddy` de referência usa
+> um subdomínio [sslip.io](https://sslip.io) (`algo.<ip-com-tracos>.sslip.io`),
+> que já resolve para o IP da VPS sem precisar configurar DNS — é o mesmo
+> esquema usado pelos outros serviços dessa VPS. Para trocar por um domínio
+> próprio, troque os três hostnames no arquivo, aponte os registros A do
+> domínio pro IP da VPS, reaplique o passo 4 e atualize `CORS_ORIGINS` e
+> `VITE_API_URL` no `.env.production` (o segundo exige reconstruir o
+> `checkin-web` e o `checkin-professor-web`, já que o Vite embute a URL da
+> API em tempo de build).
 
 ---
 
@@ -219,7 +356,7 @@ Para testar o caminho "fora do raio", basta usar qualquer coordenada a mais de
 1. `docker compose up -d --build` e `npm run dev:dashboard`.
 2. Abra o app no Expo Go e entre com `ana.rocha@univc.br` / `senha123`.
 3. Toque em **Marcar chegada**. O app pede a permissão de localização, lê as
-   coordenadas e aciona a biometria do aparelho.
+   coordenadas e envia o registro — não há confirmação biométrica.
 4. A confirmação mostra o **horário devolvido pelo servidor** (não o relógio do
    celular) e a distância até o campus.
 5. Toque em **Marcar saída** — o botão de chegada fica desabilitado até lá.
@@ -245,9 +382,47 @@ Base: `http://localhost:3333`. Payloads em `snake_case`, validados com zod.
 | `POST` | `/auth/refresh`     | troca o refresh token (rotaciona e revoga o antigo) |
 | `POST` | `/auth/logout`      | revoga o refresh token                         |
 | `GET`  | `/auth/me`          | dados do professor autenticado                 |
+| `PATCH` | `/auth/senha`      | professor troca a própria senha (exige a atual) |
 
 Access token JWT de 15 min; refresh token de 7 dias, guardado no banco **apenas
 como hash SHA-256** e rotacionado a cada uso.
+
+#### Esqueci minha senha / primeiro acesso
+
+Não existe fluxo de autoatendimento por e-mail — o reset é sempre iniciado
+pelo RH:
+
+1. RH chama `PATCH /admin/professores/:id/redefinir-senha` (dashboard → aba
+   **Professores** → **Redefinir senha**). A API gera uma senha temporária
+   legível e devolve em texto puro **uma única vez**, nessa resposta — nada
+   disso é gravado, só o hash. O RH repassa ao professor por fora do sistema
+   (telefone, presencial etc.).
+2. O professor loga normalmente com a senha temporária. A resposta de login
+   vem com `usuario.deve_trocar_senha: true`, e os três apps (dashboard não,
+   só os do professor: mobile e web) bloqueiam o uso normal e mostram uma
+   tela de troca obrigatória até isso resolver.
+3. O professor chama `PATCH /auth/senha` informando a senha temporária como
+   `senha_atual` e a nova como `senha_nova`. A partir daí `deve_trocar_senha`
+   volta a `false` e ele usa a senha que escolheu.
+
+Redefinir a senha também revoga todos os refresh tokens ativos daquele
+professor — sessões antigas em outros aparelhos precisam logar de novo.
+
+#### Gestão de professores pelo RH
+
+O dashboard (aba **Professores**) cobre o ciclo completo do cadastro, sem
+precisar de `prisma studio`:
+
+- **Cadastrar** — nome, CPF, email e curso. Uma senha temporária é gerada na
+  hora (mesma mecânica do reset) e o professor é obrigado a trocá-la no
+  primeiro login.
+- **Editar** — nome, CPF, email e curso, a qualquer momento.
+- **Ativar/Desativar** — desliga o acesso sem apagar o histórico.
+- **Apagar** — remove o professor definitivamente, e os registros de ponto
+  dele saem junto (cascade no schema). Ação irreversível, com confirmação.
+
+Toda criação, edição e exclusão gera uma entrada em `logs_auditoria`
+(`CRIACAO_PROFESSOR`, `EDICAO_PROFESSOR`, `EXCLUSAO_PROFESSOR`).
 
 ### Professor
 
@@ -261,16 +436,18 @@ como hash SHA-256** e rotacionado a cada uso.
 // POST /checkin
 {
   "tipo": "CHEGADA",              // CHEGADA | SAIDA
-  "latitude": -18.70046,
-  "longitude": -39.86322,
-  "metodo_biometrico": "FACE_ID", // FACE_ID | DIGITAL | NENHUM
+  "latitude": -18.70046,          // obrigatória
+  "longitude": -39.86322,         // obrigatória
   "precisao_metros": 12.4,        // opcional
   "sincronizado_offline": false,  // opcional
   "registrado_offline_em": "..."  // obrigatório se sincronizado_offline
 }
 ```
 
-Não existe campo de horário: o `timestamp_servidor` é sempre `now()` no backend.
+Não existe campo de horário: o `timestamp_servidor` é sempre `now()` no
+backend. Não existe campo de biometria: chaves desconhecidas são descartadas
+pelo zod, então um app antigo que ainda envie `metodo_biometrico` continua
+funcionando — o campo é simplesmente ignorado.
 
 ### Admin (RH/coordenação)
 
@@ -280,7 +457,11 @@ Não existe campo de horário: o `timestamp_servidor` é sempre `now()` no backe
 | `PATCH` | `/admin/registros/:id/aprovar`    | aprova um pendente (`justificativa_manual` obrigatória) |
 | `PATCH` | `/admin/registros/:id/rejeitar`   | rejeita um pendente (idem)                          |
 | `GET`   | `/admin/relatorio-jornada`        | pares chegada/saída, horas e inconsistências        |
-| `GET`   | `/admin/professores`              | lista para os filtros do dashboard                  |
+| `GET`   | `/admin/professores`              | lista para os filtros e a tela de gestão do dashboard |
+| `POST`  | `/admin/professores`              | cadastra um professor novo (gera senha temporária, força troca no primeiro login) |
+| `PATCH` | `/admin/professores/:id`          | edita nome/CPF/email/curso/ativo de um professor    |
+| `DELETE`| `/admin/professores/:id`          | apaga definitivamente um professor (e os registros de ponto dele, em cascata) |
+| `PATCH` | `/admin/professores/:id/redefinir-senha` | gera senha temporária e força troca no próximo login |
 | `GET`   | `/admin/cursos`                   | cursos distintos                                    |
 | `GET`   | `/admin/campi`                    | campi cadastrados                                   |
 
@@ -302,14 +483,16 @@ Não existe campo de horário: o `timestamp_servidor` é sempre `now()` no backe
 
 ### Status do registro
 
-| Situação                                   | Status                |
-| ------------------------------------------ | --------------------- |
-| Dentro do raio, com biometria confirmada   | `VALIDADO`            |
-| Fora do raio do campus mais próximo        | `PENDENTE_APROVACAO`  |
-| Nenhum campus cadastrado                   | `PENDENTE_APROVACAO`  |
-| Biometria não confirmada (`NENHUM`)        | `PENDENTE_APROVACAO`  |
-| Registro vindo da fila offline             | `PENDENTE_APROVACAO`  |
+| Situação                                   | Status                 |
+| ------------------------------------------ | ---------------------- |
+| Dentro do raio do campus mais próximo      | `VALIDADO`             |
+| Fora do raio do campus mais próximo        | `PENDENTE_APROVACAO`   |
+| Nenhum campus cadastrado                   | `PENDENTE_APROVACAO`   |
+| Registro vindo da fila offline             | `PENDENTE_APROVACAO`   |
 | Decisão manual do RH                       | `VALIDADO`/`REJEITADO` |
+
+Sem coordenada não há registro: `latitude` e `longitude` são obrigatórias no
+schema, e o app bloqueia o envio quando a permissão de localização é negada.
 
 `REJEITADO` **nunca** é atribuído automaticamente — é sempre decisão humana,
 com justificativa.
@@ -349,34 +532,26 @@ CSV (separador `;` e BOM, para o Excel em pt-BR abrir com os acentos certos).
 
 ---
 
-## LGPD e dados biométricos
+## LGPD e dados pessoais
 
-**Nenhum dado biométrico bruto é coletado, transmitido ou armazenado em ponto
-algum deste sistema.**
+**O sistema não coleta, não transmite e não armazena dado biométrico de nenhuma
+natureza** — nem o dado bruto, nem o rótulo do método usado.
 
-Como funciona na prática:
+A biometria foi removida do produto por decisão de escopo (migration
+`20260906120000_remove_biometria`): a coluna `registros_ponto.metodo_biometrico`
+e o enum `MetodoBiometrico` deixaram de existir, o app não declara mais as
+permissões `USE_BIOMETRIC`/`USE_FINGERPRINT` nem `NSFaceIDUsageDescription`, e a
+dependência `expo-local-authentication` saiu do `package.json` do app.
 
-1. O app chama `expo-local-authentication`, que aciona a API nativa de biometria
-   (Face ID / Touch ID / digital do Android).
-2. A comparação acontece **dentro do aparelho**, no enclave seguro do sistema
-   operacional. O app não tem acesso à imagem, ao template nem à digital — a
-   API devolve apenas um booleano.
-3. Ao servidor sobe somente o **rótulo do método** usado: `FACE_ID`, `DIGITAL`
-   ou `NENHUM`, gravado em `registros_ponto.metodo_biometrico`.
-4. Não há endpoint que receba imagem ou template biométrico, e nenhuma coluna do
-   schema (`apps/api/prisma/schema.prisma`) armazena esse tipo de dado.
-5. Os logs de auditoria guardam motivo, distância, tipo e método — nunca
-   credenciais nem qualquer coisa derivada de biometria.
-
-Isso é uma decisão de arquitetura, não um detalhe de implementação: a biometria
-é um dado pessoal sensível (art. 5º, II da LGPD), e a forma mais segura de
-tratá-la é **não tratá-la**. O sistema delega a verificação ao dispositivo e
-guarda apenas a prova de que ela passou.
+Isso simplifica o enquadramento na LGPD: biometria é dado pessoal sensível
+(art. 5º, II), e a forma mais segura de tratá-la é **não tratá-la**.
 
 Dados pessoais que o sistema **de fato** guarda: nome, CPF, email, curso,
 coordenadas do momento do registro e horários. A senha é armazenada como hash
-bcrypt. As coordenadas existem para justificar a decisão de validar ou não o
-ponto, e ficam visíveis para o RH na trilha de auditoria.
+bcrypt. As coordenadas são a única prova de presença — existem para justificar a
+decisão de validar ou não o ponto, e ficam visíveis para o RH na trilha de
+auditoria. A posição só é lida no instante em que o professor toca no botão,
+nunca em segundo plano.
 
 ### Integridade do horário
 
@@ -397,19 +572,31 @@ npm run test:unit -w @univc/api       # só unitários (não precisam de banco)
 npm run test:integration -w @univc/api
 ```
 
-**53 testes**, divididos em:
+**73 testes**, divididos em:
 
 - `tests/unit/geo.test.ts` — Haversine (distância conhecida, simetria,
   antimeridiano, antípodas) e a geocerca (borda do raio, escolha do campus mais
   próximo entre vários polos, raio por campus).
-- `tests/unit/validacao-checkin.test.ts` — matriz de decisão do status e a
-  regra de alternância chegada/saída.
+- `tests/unit/validacao-checkin.test.ts` — matriz de decisão do status
+  (incluindo a varredura exaustiva que garante que nenhum motivo de biometria
+  sobrou) e a regra de alternância chegada/saída.
 - `tests/unit/jornada.test.ts` — pareamento, soma de horas, agrupamento por dia
   no fuso certo e cada tipo de inconsistência.
 - `tests/integration/checkin.test.ts` — fluxo completo do `POST /checkin` contra
   um Postgres real: login, validação dentro do raio, pendência fora do raio,
-  rejeição de horário forjado, sequência inválida, fila offline, auditoria,
-  histórico, aprovação manual pelo RH e bloqueio de professor em rota de admin.
+  rejeição de horário forjado, recusa de payload sem coordenadas, compatibilidade
+  com app antigo que ainda envie `metodo_biometrico`, sequência inválida, fila
+  offline, auditoria, histórico, aprovação manual pelo RH e bloqueio de professor
+  em rota de admin.
+- `tests/integration/senha.test.ts` — RH redefine a senha de um professor
+  (senha temporária de uso único, `deve_trocar_senha`, revogação dos refresh
+  tokens ativos), professor troca a própria senha (`PATCH /auth/senha`,
+  exige a senha atual), e o fluxo completo de ponta a ponta.
+- `tests/integration/professores.test.ts` — RH cadastra, edita, ativa/desativa
+  e apaga professores (`POST`/`PATCH`/`DELETE /admin/professores[/:id]`):
+  conflito de email/CPF duplicado, validação de CPF, 404 para id inexistente,
+  bloqueio de professor tentando usar as rotas, e a exclusão em cascata dos
+  registros de ponto.
 
 Os testes de integração usam `DATABASE_URL_TEST` (banco separado, truncado a
 cada teste) e **se marcam como pulados** se o Postgres não estiver no ar, para
@@ -456,9 +643,9 @@ cada teste) e **se marcam como pulados** se o Postgres não estiver no ar, para
 
 Por decisão do escopo, **não** estão implementados:
 
-- reconhecimento facial via câmera ou comparação server-side (a biometria é do
-  dispositivo, por design — ver a seção de LGPD);
-- totens físicos de biometria (fase 2);
+- qualquer forma de biometria — facial, digital ou do próprio dispositivo: a
+  presença é comprovada só por localização (ver a seção de LGPD);
+- totens físicos de ponto (fase 2);
 - infraestrutura de produção/cloud, CI/CD, observabilidade;
-- cadastro de professores e campi pela interface — hoje via seed ou
-  `npx prisma studio`.
+- cadastro de campi pela interface — hoje via seed ou `npx prisma studio`
+  (professores já têm CRUD completo no dashboard, aba **Professores**).

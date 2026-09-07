@@ -16,6 +16,9 @@ export async function rotasCheckin(app: FastifyInstance): Promise<void> {
   /**
    * Registra chegada ou saida.
    *
+   * A presenca e comprovada apenas pela localizacao enviada no corpo: nao ha
+   * etapa de biometria em nenhum ponto do fluxo.
+   *
    * O horario gravado (`timestamp_servidor`) e sempre `new Date()` aqui no
    * backend. O corpo da requisicao nao tem campo de horario e o schema zod
    * descarta chaves desconhecidas, entao um cliente adulterado nao consegue
@@ -88,7 +91,6 @@ export async function rotasCheckin(app: FastifyInstance): Promise<void> {
 
       const decisao = decidirStatus({
         geocerca,
-        metodoBiometrico: corpo.metodo_biometrico,
         sincronizadoOffline: corpo.sincronizado_offline,
       });
 
@@ -102,7 +104,6 @@ export async function rotasCheckin(app: FastifyInstance): Promise<void> {
           longitude: corpo.longitude,
           distanciaDoCampusMetros: geocerca?.distanciaMetros ?? -1,
           precisaoMetros: corpo.precisao_metros ?? null,
-          metodoBiometrico: corpo.metodo_biometrico,
           status: decisao.status,
           sincronizadoOffline: corpo.sincronizado_offline,
           registradoOfflineEm: corpo.registrado_offline_em
@@ -124,7 +125,6 @@ export async function rotasCheckin(app: FastifyInstance): Promise<void> {
           status: decisao.status,
           distancia_metros: Math.round(geocerca?.distanciaMetros ?? -1),
           campus: geocerca?.campus.nome ?? null,
-          metodo_biometrico: corpo.metodo_biometrico,
           sincronizado_offline: corpo.sincronizado_offline,
         },
       });

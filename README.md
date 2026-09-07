@@ -21,6 +21,7 @@ o RH decide, com justificativa obrigatória.
 - [Arquitetura](#arquitetura)
 - [Subindo o ambiente](#subindo-o-ambiente)
 - [Deploy no Render](#deploy-no-render)
+- [Deploy na VPS](#deploy-na-vps)
 - [Usuários de teste](#usuários-de-teste)
 - [Rodando o app no Expo Go](#rodando-o-app-no-expo-go)
 - [Testando o fluxo completo](#testando-o-fluxo-completo)
@@ -178,6 +179,70 @@ Supabase). O [`render.yaml`](render.yaml) na raiz descreve dois serviços:
 > **Plano gratuito do Render**: o Web Service "dorme" após um período sem
 > tráfego e o primeiro request depois disso demora mais (cold start). Isso é
 > esperado e não indica problema na API.
+
+---
+
+## Deploy na VPS
+
+Alternativa ao Render: rodar a API e o dashboard em containers Docker numa
+VPS própria, atrás de um Caddy que já esteja publicando outros serviços na
+mesma máquina (é o caso da VPS de referência deste projeto, que também roda
+o `agente-univc`). O banco continua sendo o Supabase externo — este compose
+não sobe Postgres.
+
+**Arquivos relevantes:**
+
+| Arquivo                        | Papel                                                          |
+| ------------------------------- | --------------------------------------------------------------- |
+| `docker-compose.prod.yml`       | Sobe `checkin-api` e `checkin-web` (dashboard buildado), sem publicar portas no host — só ficam visíveis na rede Docker compartilhada |
+| `apps/dashboard/Dockerfile`     | Builda o dashboard (Vite) e serve o resultado por um Caddy interno, sem TLS |
+| `.env.production.example`       | Variáveis necessárias (copiar para `.env.production` e preencher) |
+| `deploy/vps/checkin.caddy`      | Blocos de site para o Caddy público existente encaminhar `checkin.*` e `api.*` até os containers |
+
+### Passo a passo
+
+1. **Na VPS**, clone o repositório em um diretório próprio (não dentro do
+   projeto que já está rodando):
+   ```bash
+   mkdir -p /opt/sistema-checkin && cd /opt/sistema-checkin
+   git clone --branch feat/checkin-somente-localizacao \
+     https://github.com/AguiaLTDA/sistema.checkin.git .
+   ```
+2. Configure as variáveis:
+   ```bash
+   cp .env.production.example .env.production
+   # edite .env.production: DATABASE_URL (Supabase), JWT secrets
+   # (openssl rand -hex 32), CORS_ORIGINS e VITE_API_URL com o domínio
+   # público que a API e o dashboard vão usar.
+   ```
+3. Suba os containers (a rede `agente-univc_runtime` precisa já existir —
+   é criada pelo Caddy público compartilhado):
+   ```bash
+   docker compose --env-file .env.production -f docker-compose.prod.yml \
+     up -d --build
+   ```
+4. **Publique os domínios** sem tocar no Caddyfile principal do Caddy
+   compartilhado: copie o bloco de site pra pasta de import dele e recarregue
+   a configuração (sem reiniciar o container, sem downtime pros outros
+   serviços que ele já publica):
+   ```bash
+   cp deploy/vps/checkin.caddy /opt/agente-univc/publicador/conf.d/checkin.caddy
+   docker exec univc-publicador caddy reload --config /etc/caddy/Caddyfile
+   ```
+5. Confira:
+   ```bash
+   curl https://api.<seu-host>/health
+   ```
+   e abra `https://checkin.<seu-host>` no navegador.
+
+> **Domínio próprio depois**: o `deploy/vps/checkin.caddy` de referência usa
+> um subdomínio [sslip.io](https://sslip.io) (`algo.<ip-com-tracos>.sslip.io`),
+> que já resolve para o IP da VPS sem precisar configurar DNS — é o mesmo
+> esquema usado pelos outros serviços dessa VPS. Para trocar por um domínio
+> próprio, troque os dois hostnames no arquivo, aponte os registros A do
+> domínio pro IP da VPS, reaplique o passo 4 e atualize `CORS_ORIGINS` e
+> `VITE_API_URL` no `.env.production` (o segundo exige reconstruir o
+> `checkin-web`, já que o Vite embute a URL da API em tempo de build).
 
 ---
 

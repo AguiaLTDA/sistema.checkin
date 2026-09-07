@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -47,7 +48,11 @@ export function LoginTela() {
     >
       <ScrollView contentContainerStyle={estilos.conteudo}>
         <View style={estilos.cabecalho}>
-          <Text style={estilos.titulo}>UNIVC Check-in</Text>
+          <Image
+            source={require('../../assets/logo-univc-branco.png')}
+            style={estilos.logo}
+            resizeMode="contain"
+          />
           <Text style={estilos.subtitulo}>
             Registro de ponto docente do Centro Universitario Vale do Cricare
           </Text>
@@ -102,7 +107,7 @@ const estilos = StyleSheet.create({
   container: { backgroundColor: CORES.primariaEscura, flex: 1 },
   conteudo: { flexGrow: 1, justifyContent: 'center', padding: 24, gap: 28 },
   cabecalho: { gap: 8 },
-  titulo: { color: CORES.branco, fontSize: 30, fontWeight: '800' },
+  logo: { height: 40, width: 180 },
   subtitulo: { color: '#CBD5E1', fontSize: 15, lineHeight: 21 },
   formulario: {
     backgroundColor: CORES.branco,

@@ -14,11 +14,14 @@ export function Layout() {
     <div className="flex min-h-full flex-col">
       <header className="bg-univc-900 text-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="text-lg font-semibold">UNIVC Check-in</p>
-            <p className="text-xs text-univc-100">
-              Controle de presenca docente — RH e coordenacao
-            </p>
+          <div className="flex items-center gap-3">
+            <img src="/logo-univc-branco.png" alt="UNIVC" className="h-9" />
+            <div className="hidden border-l border-white/20 pl-3 sm:block">
+              <p className="text-sm font-semibold">Check-in</p>
+              <p className="text-xs text-univc-100">
+                Controle de presenca docente — RH e coordenacao
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-4 text-sm">
             <span className="text-univc-100">{usuario?.nome}</span>

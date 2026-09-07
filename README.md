@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="branding/univc-horizontal.png" alt="UNIVC - Centro Universitário Vale do Cricaré" width="320">
+</p>
+
 # UNIVC Check-in
 
 Controle de presença de professores do **Centro Universitário Vale do Cricaré (UNIVC)**.

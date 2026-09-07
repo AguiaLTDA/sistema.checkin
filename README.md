@@ -2,17 +2,13 @@
 
 Controle de presença de professores do **Centro Universitário Vale do Cricaré (UNIVC)**.
 
-O professor marca chegada e saída pelo celular, e o registro só é validado
-automaticamente quando dois fatores conferem:
+O professor marca chegada e saída pelo celular. **A localização é o único
+fator de validação**: o servidor calcula, por Haversine, a distância entre a
+posição enviada e o campus mais próximo e compara com o raio permitido daquele
+campus. Não há etapa de biometria em nenhum ponto do fluxo.
 
-1. **Geolocalização** — o servidor calcula, por Haversine, a distância entre a
-   posição enviada e o campus mais próximo, e compara com o raio permitido
-   daquele campus.
-2. **Biometria do aparelho** — Face ID ou digital, validados pelo próprio
-   sistema operacional do celular. Nenhum dado biométrico chega ao servidor.
-
-Registros fora do raio (ou sem biometria confirmada) não são descartados: entram
-como `PENDENTE_APROVACAO` e o RH decide, com justificativa obrigatória.
+Registros fora do raio não são descartados: entram como `PENDENTE_APROVACAO` e
+o RH decide, com justificativa obrigatória.
 
 ---
 
@@ -25,7 +21,7 @@ como `PENDENTE_APROVACAO` e o RH decide, com justificativa obrigatória.
 - [Testando o fluxo completo](#testando-o-fluxo-completo)
 - [API](#api)
 - [Regras de negócio](#regras-de-negócio)
-- [LGPD e dados biométricos](#lgpd-e-dados-biométricos)
+- [LGPD e dados pessoais](#lgpd-e-dados-pessoais)
 - [Testes](#testes)
 - [Decisões de projeto](#decisões-de-projeto)
 - [Fora do escopo do MVP](#fora-do-escopo-do-mvp)
@@ -52,7 +48,7 @@ sistema.checkin/
 | --------- | --------------------------------------------------------------------- |
 | API       | Node 22, TypeScript, Fastify 5, Prisma 6, PostgreSQL 16, zod, JWT      |
 | Dashboard | React 19, Vite, Tailwind 4, React Router                              |
-| Mobile    | Expo SDK 57, React Native 0.86, `expo-location`, `expo-local-authentication` |
+| Mobile    | Expo SDK 57, React Native 0.86, `expo-location`                       |
 | Testes    | Vitest (unitários puros + integração contra Postgres real)            |
 
 **`apps/mobile` fica fora dos workspaces de propósito.** O Metro (bundler do
@@ -219,7 +215,7 @@ Para testar o caminho "fora do raio", basta usar qualquer coordenada a mais de
 1. `docker compose up -d --build` e `npm run dev:dashboard`.
 2. Abra o app no Expo Go e entre com `ana.rocha@univc.br` / `senha123`.
 3. Toque em **Marcar chegada**. O app pede a permissão de localização, lê as
-   coordenadas e aciona a biometria do aparelho.
+   coordenadas e envia o registro — não há confirmação biométrica.
 4. A confirmação mostra o **horário devolvido pelo servidor** (não o relógio do
    celular) e a distância até o campus.
 5. Toque em **Marcar saída** — o botão de chegada fica desabilitado até lá.
@@ -261,16 +257,18 @@ como hash SHA-256** e rotacionado a cada uso.
 // POST /checkin
 {
   "tipo": "CHEGADA",              // CHEGADA | SAIDA
-  "latitude": -18.70046,
-  "longitude": -39.86322,
-  "metodo_biometrico": "FACE_ID", // FACE_ID | DIGITAL | NENHUM
+  "latitude": -18.70046,          // obrigatória
+  "longitude": -39.86322,         // obrigatória
   "precisao_metros": 12.4,        // opcional
   "sincronizado_offline": false,  // opcional
   "registrado_offline_em": "..."  // obrigatório se sincronizado_offline
 }
 ```
 
-Não existe campo de horário: o `timestamp_servidor` é sempre `now()` no backend.
+Não existe campo de horário: o `timestamp_servidor` é sempre `now()` no
+backend. Não existe campo de biometria: chaves desconhecidas são descartadas
+pelo zod, então um app antigo que ainda envie `metodo_biometrico` continua
+funcionando — o campo é simplesmente ignorado.
 
 ### Admin (RH/coordenação)
 
@@ -302,14 +300,16 @@ Não existe campo de horário: o `timestamp_servidor` é sempre `now()` no backe
 
 ### Status do registro
 
-| Situação                                   | Status                |
-| ------------------------------------------ | --------------------- |
-| Dentro do raio, com biometria confirmada   | `VALIDADO`            |
-| Fora do raio do campus mais próximo        | `PENDENTE_APROVACAO`  |
-| Nenhum campus cadastrado                   | `PENDENTE_APROVACAO`  |
-| Biometria não confirmada (`NENHUM`)        | `PENDENTE_APROVACAO`  |
-| Registro vindo da fila offline             | `PENDENTE_APROVACAO`  |
+| Situação                                   | Status                 |
+| ------------------------------------------ | ---------------------- |
+| Dentro do raio do campus mais próximo      | `VALIDADO`             |
+| Fora do raio do campus mais próximo        | `PENDENTE_APROVACAO`   |
+| Nenhum campus cadastrado                   | `PENDENTE_APROVACAO`   |
+| Registro vindo da fila offline             | `PENDENTE_APROVACAO`   |
 | Decisão manual do RH                       | `VALIDADO`/`REJEITADO` |
+
+Sem coordenada não há registro: `latitude` e `longitude` são obrigatórias no
+schema, e o app bloqueia o envio quando a permissão de localização é negada.
 
 `REJEITADO` **nunca** é atribuído automaticamente — é sempre decisão humana,
 com justificativa.
@@ -349,34 +349,26 @@ CSV (separador `;` e BOM, para o Excel em pt-BR abrir com os acentos certos).
 
 ---
 
-## LGPD e dados biométricos
+## LGPD e dados pessoais
 
-**Nenhum dado biométrico bruto é coletado, transmitido ou armazenado em ponto
-algum deste sistema.**
+**O sistema não coleta, não transmite e não armazena dado biométrico de nenhuma
+natureza** — nem o dado bruto, nem o rótulo do método usado.
 
-Como funciona na prática:
+A biometria foi removida do produto por decisão de escopo (migration
+`20260906120000_remove_biometria`): a coluna `registros_ponto.metodo_biometrico`
+e o enum `MetodoBiometrico` deixaram de existir, o app não declara mais as
+permissões `USE_BIOMETRIC`/`USE_FINGERPRINT` nem `NSFaceIDUsageDescription`, e a
+dependência `expo-local-authentication` saiu do `package.json` do app.
 
-1. O app chama `expo-local-authentication`, que aciona a API nativa de biometria
-   (Face ID / Touch ID / digital do Android).
-2. A comparação acontece **dentro do aparelho**, no enclave seguro do sistema
-   operacional. O app não tem acesso à imagem, ao template nem à digital — a
-   API devolve apenas um booleano.
-3. Ao servidor sobe somente o **rótulo do método** usado: `FACE_ID`, `DIGITAL`
-   ou `NENHUM`, gravado em `registros_ponto.metodo_biometrico`.
-4. Não há endpoint que receba imagem ou template biométrico, e nenhuma coluna do
-   schema (`apps/api/prisma/schema.prisma`) armazena esse tipo de dado.
-5. Os logs de auditoria guardam motivo, distância, tipo e método — nunca
-   credenciais nem qualquer coisa derivada de biometria.
-
-Isso é uma decisão de arquitetura, não um detalhe de implementação: a biometria
-é um dado pessoal sensível (art. 5º, II da LGPD), e a forma mais segura de
-tratá-la é **não tratá-la**. O sistema delega a verificação ao dispositivo e
-guarda apenas a prova de que ela passou.
+Isso simplifica o enquadramento na LGPD: biometria é dado pessoal sensível
+(art. 5º, II), e a forma mais segura de tratá-la é **não tratá-la**.
 
 Dados pessoais que o sistema **de fato** guarda: nome, CPF, email, curso,
 coordenadas do momento do registro e horários. A senha é armazenada como hash
-bcrypt. As coordenadas existem para justificar a decisão de validar ou não o
-ponto, e ficam visíveis para o RH na trilha de auditoria.
+bcrypt. As coordenadas são a única prova de presença — existem para justificar a
+decisão de validar ou não o ponto, e ficam visíveis para o RH na trilha de
+auditoria. A posição só é lida no instante em que o professor toca no botão,
+nunca em segundo plano.
 
 ### Integridade do horário
 
@@ -402,14 +394,17 @@ npm run test:integration -w @univc/api
 - `tests/unit/geo.test.ts` — Haversine (distância conhecida, simetria,
   antimeridiano, antípodas) e a geocerca (borda do raio, escolha do campus mais
   próximo entre vários polos, raio por campus).
-- `tests/unit/validacao-checkin.test.ts` — matriz de decisão do status e a
-  regra de alternância chegada/saída.
+- `tests/unit/validacao-checkin.test.ts` — matriz de decisão do status
+  (incluindo a varredura exaustiva que garante que nenhum motivo de biometria
+  sobrou) e a regra de alternância chegada/saída.
 - `tests/unit/jornada.test.ts` — pareamento, soma de horas, agrupamento por dia
   no fuso certo e cada tipo de inconsistência.
 - `tests/integration/checkin.test.ts` — fluxo completo do `POST /checkin` contra
   um Postgres real: login, validação dentro do raio, pendência fora do raio,
-  rejeição de horário forjado, sequência inválida, fila offline, auditoria,
-  histórico, aprovação manual pelo RH e bloqueio de professor em rota de admin.
+  rejeição de horário forjado, recusa de payload sem coordenadas, compatibilidade
+  com app antigo que ainda envie `metodo_biometrico`, sequência inválida, fila
+  offline, auditoria, histórico, aprovação manual pelo RH e bloqueio de professor
+  em rota de admin.
 
 Os testes de integração usam `DATABASE_URL_TEST` (banco separado, truncado a
 cada teste) e **se marcam como pulados** se o Postgres não estiver no ar, para
@@ -456,9 +451,9 @@ cada teste) e **se marcam como pulados** se o Postgres não estiver no ar, para
 
 Por decisão do escopo, **não** estão implementados:
 
-- reconhecimento facial via câmera ou comparação server-side (a biometria é do
-  dispositivo, por design — ver a seção de LGPD);
-- totens físicos de biometria (fase 2);
+- qualquer forma de biometria — facial, digital ou do próprio dispositivo: a
+  presença é comprovada só por localização (ver a seção de LGPD);
+- totens físicos de ponto (fase 2);
 - infraestrutura de produção/cloud, CI/CD, observabilidade;
 - cadastro de professores e campi pela interface — hoje via seed ou
   `npx prisma studio`.

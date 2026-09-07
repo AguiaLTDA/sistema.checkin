@@ -9,8 +9,8 @@ export interface EntradaAuditoria {
   adminId?: string | null;
   registroId?: string | null;
   /**
-   * Detalhes nao sensiveis do evento. Nunca inclua senha, token ou qualquer
-   * dado biometrico: o backend sequer recebe biometria (ver README, secao LGPD).
+   * Detalhes nao sensiveis do evento. Nunca inclua senha nem token. O sistema
+   * nao coleta biometria em nenhuma etapa (ver README, secao LGPD).
    */
   detalhes?: Record<string, unknown>;
 }

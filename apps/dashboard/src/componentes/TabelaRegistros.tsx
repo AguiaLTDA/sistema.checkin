@@ -1,5 +1,5 @@
 import type { RegistroPontoDTO } from '@univc/shared';
-import { ROTULOS_METODO_BIOMETRICO, ROTULOS_TIPO } from '@univc/shared';
+import { ROTULOS_TIPO } from '@univc/shared';
 import type { ReactNode } from 'react';
 import { formatarDataHora, formatarDistancia } from '../lib/formato';
 import { EtiquetaStatus, Vazio } from './ui';
@@ -24,7 +24,6 @@ export function TabelaRegistros({ registros, acoes }: Props) {
             <th className="px-3 py-2 font-semibold">Tipo</th>
             <th className="px-3 py-2 font-semibold">Horario (servidor)</th>
             <th className="px-3 py-2 font-semibold">Distancia</th>
-            <th className="px-3 py-2 font-semibold">Biometria</th>
             <th className="px-3 py-2 font-semibold">Status</th>
             {acoes && <th className="px-3 py-2 font-semibold">Acoes</th>}
           </tr>
@@ -76,9 +75,6 @@ export function TabelaRegistros({ registros, acoes }: Props) {
                 <p className="text-xs text-slate-400">
                   {registro.campus?.nome ?? 'sem campus'}
                 </p>
-              </td>
-              <td className="px-3 py-3 text-slate-600">
-                {ROTULOS_METODO_BIOMETRICO[registro.metodo_biometrico]}
               </td>
               <td className="px-3 py-3">
                 <EtiquetaStatus status={registro.status} />

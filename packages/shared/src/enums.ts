@@ -9,13 +9,6 @@ export type TipoRegistro = (typeof TIPOS_REGISTRO)[number];
 export const STATUS_REGISTRO = ['VALIDADO', 'PENDENTE_APROVACAO', 'REJEITADO'] as const;
 export type StatusRegistro = (typeof STATUS_REGISTRO)[number];
 
-/**
- * Metodo de biometria usado pelo aparelho. O backend recebe apenas o rotulo do
- * metodo, nunca o dado biometrico em si (ver secao LGPD do README).
- */
-export const METODOS_BIOMETRICOS = ['FACE_ID', 'DIGITAL', 'NENHUM'] as const;
-export type MetodoBiometrico = (typeof METODOS_BIOMETRICOS)[number];
-
 export const PAPEIS_USUARIO = ['PROFESSOR', 'ADMIN'] as const;
 export type PapelUsuario = (typeof PAPEIS_USUARIO)[number];
 
@@ -36,12 +29,6 @@ export const ROTULOS_STATUS: Record<StatusRegistro, string> = {
 export const ROTULOS_TIPO: Record<TipoRegistro, string> = {
   CHEGADA: 'Chegada',
   SAIDA: 'Saida',
-};
-
-export const ROTULOS_METODO_BIOMETRICO: Record<MetodoBiometrico, string> = {
-  FACE_ID: 'Face ID',
-  DIGITAL: 'Digital',
-  NENHUM: 'Nenhum',
 };
 
 export const ROTULOS_INCONSISTENCIA: Record<TipoInconsistencia, string> = {

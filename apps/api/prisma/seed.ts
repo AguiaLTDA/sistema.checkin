@@ -146,7 +146,6 @@ async function main(): Promise<void> {
     latitude: number;
     longitude: number;
     status: 'VALIDADO' | 'PENDENTE_APROVACAO';
-    metodo: 'FACE_ID' | 'DIGITAL';
     campusId: string | null;
   };
 
@@ -165,7 +164,6 @@ async function main(): Promise<void> {
     latitude: dentroDoCampus.latitude,
     longitude: dentroDoCampus.longitude,
     status: 'VALIDADO',
-    metodo: 'FACE_ID',
     campusId: campus.id,
   });
 
@@ -178,13 +176,12 @@ async function main(): Promise<void> {
 
     // Professor de Odontologia: um dia completo e um registro fora do raio,
     // que o dashboard mostra como pendente de aprovacao do RH.
-    { ...base(odontologia.id, 3, 'CHEGADA', 13, 30), metodo: 'DIGITAL' },
-    { ...base(odontologia.id, 3, 'SAIDA', 17, 45), metodo: 'DIGITAL' },
+    base(odontologia.id, 3, 'CHEGADA', 13, 30),
+    base(odontologia.id, 3, 'SAIDA', 17, 45),
     {
       ...base(odontologia.id, 1, 'CHEGADA', 13, 40),
       ...PONTO_FORA_DO_RAIO,
       status: 'PENDENTE_APROVACAO',
-      metodo: 'DIGITAL',
     },
 
     // Professora de Enfermagem: chegada sem saida, para exercitar o alerta de
@@ -214,7 +211,6 @@ async function main(): Promise<void> {
         latitude: registro.latitude,
         longitude: registro.longitude,
         distanciaDoCampusMetros: distancia,
-        metodoBiometrico: registro.metodo,
         status: registro.status,
         campusId: registro.campusId,
         sincronizadoOffline: false,

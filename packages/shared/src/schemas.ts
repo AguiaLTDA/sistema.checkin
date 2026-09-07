@@ -1,12 +1,11 @@
 import { z } from 'zod';
-import {
-  METODOS_BIOMETRICOS,
-  STATUS_REGISTRO,
-  TIPOS_REGISTRO,
-} from './enums.js';
+import { STATUS_REGISTRO, TIPOS_REGISTRO } from './enums.js';
 
 /**
  * Contratos de entrada da API, em snake_case (formato do payload HTTP).
+ *
+ * O check-in e validado exclusivamente pela localizacao: latitude e longitude
+ * sao obrigatorias e nao existe campo de biometria em nenhum schema.
  *
  * Observacao importante sobre horario: nenhum schema de check-in aceita um
  * campo de "horario do registro". O `timestamp_servidor` e sempre gerado pelo
@@ -46,16 +45,15 @@ export type RefreshBody = z.infer<typeof refreshBodySchema>;
 // Check-in
 // ---------------------------------------------------------------------------
 
+/**
+ * Corpo do POST /checkin. A presenca e comprovada apenas pela coordenada
+ * enviada no momento do registro; latitude e longitude sao obrigatorias.
+ */
 export const checkinBodySchema = z
   .object({
     tipo: z.enum(TIPOS_REGISTRO),
     latitude: latitudeSchema,
     longitude: longitudeSchema,
-    /**
-     * Rotulo do metodo biometrico validado localmente no aparelho.
-     * NUNCA recebe imagem, template ou qualquer dado biometrico bruto.
-     */
-    metodo_biometrico: z.enum(METODOS_BIOMETRICOS),
     /** Precisao reportada pelo GPS do aparelho, em metros (opcional). */
     precisao_metros: z.number().nonnegative().max(100000).optional(),
     /** true quando o registro veio da fila offline do app. */

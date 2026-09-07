@@ -1,5 +1,4 @@
 import type {
-  MetodoBiometrico,
   PapelUsuario,
   StatusRegistro,
   TipoInconsistencia,
@@ -39,7 +38,6 @@ export interface RegistroPontoDTO {
   latitude: number;
   longitude: number;
   distancia_do_campus_metros: number;
-  metodo_biometrico: MetodoBiometrico;
   status: StatusRegistro;
   sincronizado_offline: boolean;
   justificativa_manual: string | null;

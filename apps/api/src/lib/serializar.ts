@@ -18,7 +18,6 @@ export function registroParaDTO(registro: RegistroCompleto): RegistroPontoDTO {
     latitude: registro.latitude,
     longitude: registro.longitude,
     distancia_do_campus_metros: Math.round(registro.distanciaDoCampusMetros),
-    metodo_biometrico: registro.metodoBiometrico,
     status: registro.status,
     sincronizado_offline: registro.sincronizadoOffline,
     justificativa_manual: registro.justificativaManual,

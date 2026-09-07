@@ -57,8 +57,8 @@ export function Layout() {
       </main>
 
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
-        Nenhum dado biometrico e coletado ou armazenado: a biometria e validada
-        no proprio aparelho do professor.
+        A presenca e comprovada apenas pela localizacao do aparelho no momento
+        do registro. Nenhum dado biometrico e coletado ou armazenado.
       </footer>
     </div>
   );

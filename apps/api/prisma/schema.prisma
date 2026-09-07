@@ -1,8 +1,8 @@
 // Modelagem do sistema de check-in de professores da UNIVC.
 //
-// LGPD: nenhum campo deste schema armazena dado biometrico bruto. A biometria
-// e validada localmente no aparelho (Face ID / digital) e o backend recebe
-// apenas o rotulo do metodo usado, em `RegistroPonto.metodoBiometrico`.
+// A presenca e comprovada exclusivamente pela localizacao (geocerca do campus).
+// LGPD: o sistema nao coleta, nao trata e nao armazena dado biometrico de
+// nenhuma natureza — nem o dado bruto, nem rotulo de metodo biometrico.
 
 generator client {
   provider = "prisma-client-js"
@@ -22,14 +22,6 @@ enum StatusRegistro {
   VALIDADO
   PENDENTE_APROVACAO
   REJEITADO
-}
-
-/// Rotulo do metodo biometrico validado no proprio aparelho.
-/// NAO representa e nao acompanha nenhum dado biometrico.
-enum MetodoBiometrico {
-  FACE_ID
-  DIGITAL
-  NENHUM
 }
 
 enum AcaoAuditoria {
@@ -124,9 +116,6 @@ model RegistroPonto {
   /// Precisao do GPS reportada pelo aparelho, quando disponivel.
   precisaoMetros Float? @map("precisao_metros")
 
-  /// Rotulo do metodo biometrico validado no aparelho. Sem dado biometrico.
-  metodoBiometrico MetodoBiometrico @map("metodo_biometrico")
-
   status StatusRegistro
 
   /// true quando o registro chegou pela fila offline do app.
@@ -186,7 +175,7 @@ model LogAuditoria {
   adminId     String?            @map("admin_id") @db.Uuid
   registroId  String?            @map("registro_id") @db.Uuid
   /// Detalhes nao sensiveis do evento (motivo, distancia, tipo). Nunca contem
-  /// dado biometrico nem credenciais.
+  /// credenciais.
   detalhes    Json?
   ip          String?            @db.VarChar(64)
   userAgent   String?            @map("user_agent") @db.VarChar(300)

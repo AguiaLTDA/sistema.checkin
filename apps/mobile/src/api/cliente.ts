@@ -167,9 +167,9 @@ export async function sair(): Promise<void> {
 
 export interface CorpoCheckin {
   tipo: 'CHEGADA' | 'SAIDA';
+  /** Unica prova de presenca aceita pela API: nao ha campo de biometria. */
   latitude: number;
   longitude: number;
-  metodo_biometrico: 'FACE_ID' | 'DIGITAL' | 'NENHUM';
   precisao_metros?: number;
   sincronizado_offline?: boolean;
   registrado_offline_em?: string;

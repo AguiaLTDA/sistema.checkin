@@ -89,8 +89,9 @@ export function LoginTela() {
         </View>
 
         <Text style={estilos.rodape}>
-          Sua biometria e verificada pelo proprio aparelho e nunca sai dele. O
-          sistema guarda apenas a confirmacao de que a verificacao passou.
+          O registro de ponto e confirmado apenas pela sua localizacao no
+          momento em que voce marca chegada ou saida. Nenhum dado biometrico e
+          lido ou enviado pelo app.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

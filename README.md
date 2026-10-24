@@ -113,6 +113,31 @@ npm run db:seed
 npm run dev:api             # http://localhost:3333
 ```
 
+### 3.1. Banco no Supabase (nuvem)
+
+O banco de desenvolvimento na nuvem é o projeto Supabase **`univc-checkin`**
+(ref `ypnsyqawajgovbbqrcle`, região `sa-east-1`/São Paulo). O schema da
+migration `20260813202659_inicial` já está aplicado e registrado em
+`_prisma_migrations`, então `prisma migrate deploy` reconhece o banco como
+atualizado.
+
+1. No painel do Supabase, abra **Connect** e copie a connection string do
+   **Session pooler** (porta `5432`). O endereço direto
+   (`db.<ref>.supabase.co`) só aceita IPv6 no plano gratuito e não funciona a
+   partir do Render.
+2. Use essa string como `DATABASE_URL` no `.env` (local) ou nas variáveis de
+   ambiente do serviço no Render, trocando `[YOUR-PASSWORD]` pela senha do
+   banco. Ela serve tanto para a API quanto para as migrations.
+3. Para popular o banco com os dados de exemplo: `npm run db:seed`.
+
+Todas as tabelas estão com RLS ativo e sem policies: a Data API do Supabase
+(chaves `anon`/`publishable`) não lê nem grava nada, e só a API, conectada
+pelo Prisma com o usuário `postgres`, acessa os dados. Mantenha assim ao criar
+tabelas novas (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY` na migration).
+
+Não aponte `DATABASE_URL_TEST` para o Supabase: os testes de integração
+truncam as tabelas.
+
 ### 4. Dashboard do RH
 
 O dashboard não está no compose (roda direto pelo Vite):

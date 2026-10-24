@@ -105,6 +105,7 @@ export const adminRegistrosQuerySchema = z.object({
   ...periodoSchema,
   professor_id: z.string().uuid().optional(),
   curso: z.string().trim().min(1).optional(),
+  perfil_id: z.string().uuid().optional(),
   tipo: z.enum(TIPOS_REGISTRO).optional(),
   status: z.enum(STATUS_REGISTRO).optional(),
 });
@@ -124,9 +125,94 @@ export const relatorioJornadaQuerySchema = z.object({
   data_fim: z.string().min(4, 'data_fim e obrigatoria'),
   professor_id: z.string().uuid().optional(),
   curso: z.string().trim().min(1).optional(),
+  perfil_id: z.string().uuid().optional(),
 });
 export type RelatorioJornadaQuery = z.infer<typeof relatorioJornadaQuerySchema>;
 
 export const idParamSchema = z.object({
   id: z.string().uuid('id invalido'),
 });
+
+// ---------------------------------------------------------------------------
+// Cadastro de usuarios e perfis (RH)
+// ---------------------------------------------------------------------------
+
+/** CPF so com digitos; aceita a entrada com pontos e traco. */
+export const cpfSchema = z
+  .string()
+  .transform((valor) => valor.replace(/\D/g, ''))
+  .refine((valor) => valor.length === 11, 'cpf deve ter 11 digitos');
+
+const nomePessoaSchema = z
+  .string()
+  .trim()
+  .min(3, 'nome deve ter ao menos 3 caracteres')
+  .max(160, 'nome deve ter no maximo 160 caracteres');
+
+const emailSchema = z.string().trim().toLowerCase().email('email invalido').max(160);
+
+const senhaNovaSchema = z
+  .string()
+  .min(6, 'senha deve ter ao menos 6 caracteres')
+  .max(72, 'senha deve ter no maximo 72 caracteres');
+
+const cursoSchema = z
+  .string()
+  .trim()
+  .min(1, 'informe o curso ou setor')
+  .max(120, 'curso deve ter no maximo 120 caracteres');
+
+export const criarUsuarioBodySchema = z.object({
+  nome: nomePessoaSchema,
+  cpf: cpfSchema,
+  email: emailSchema,
+  senha: senhaNovaSchema,
+  curso_vinculado: cursoSchema,
+  perfil_id: z.string().uuid('perfil_id invalido'),
+});
+export type CriarUsuarioBody = z.infer<typeof criarUsuarioBodySchema>;
+
+export const atualizarUsuarioBodySchema = z
+  .object({
+    nome: nomePessoaSchema,
+    email: emailSchema,
+    curso_vinculado: cursoSchema,
+    perfil_id: z.string().uuid('perfil_id invalido'),
+    ativo: z.boolean(),
+    /** Quando enviada, redefine a senha e encerra as sessoes abertas. */
+    senha: senhaNovaSchema,
+  })
+  .partial()
+  .refine((dados) => Object.keys(dados).length > 0, {
+    message: 'envie ao menos um campo para atualizar',
+  });
+export type AtualizarUsuarioBody = z.infer<typeof atualizarUsuarioBodySchema>;
+
+const nomePerfilSchema = z
+  .string()
+  .trim()
+  .min(2, 'nome do perfil deve ter ao menos 2 caracteres')
+  .max(60, 'nome do perfil deve ter no maximo 60 caracteres');
+
+const descricaoPerfilSchema = z
+  .string()
+  .trim()
+  .max(200, 'descricao deve ter no maximo 200 caracteres');
+
+export const criarPerfilBodySchema = z.object({
+  nome: nomePerfilSchema,
+  descricao: descricaoPerfilSchema.optional(),
+});
+export type CriarPerfilBody = z.infer<typeof criarPerfilBodySchema>;
+
+export const atualizarPerfilBodySchema = z
+  .object({
+    nome: nomePerfilSchema,
+    descricao: descricaoPerfilSchema.nullable(),
+    ativo: z.boolean(),
+  })
+  .partial()
+  .refine((dados) => Object.keys(dados).length > 0, {
+    message: 'envie ao menos um campo para atualizar',
+  });
+export type AtualizarPerfilBody = z.infer<typeof atualizarPerfilBodySchema>;

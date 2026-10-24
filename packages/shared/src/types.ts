@@ -20,6 +20,8 @@ export interface UsuarioAutenticado {
   papel: PapelUsuario;
   /** Presente apenas quando papel === 'PROFESSOR'. */
   curso_vinculado?: string;
+  /** Nome do perfil (Professor, Estagiario...). Apenas para papel PROFESSOR. */
+  perfil?: string | null;
 }
 
 export interface RespostaLogin {
@@ -50,6 +52,7 @@ export interface RegistroPontoDTO {
     nome: string;
     email: string;
     curso_vinculado: string;
+    perfil: string | null;
   };
   criado_em: string;
 }
@@ -90,6 +93,7 @@ export interface JornadaProfessor {
     nome: string;
     email: string;
     curso_vinculado: string;
+    perfil: string | null;
   };
   dias: JornadaDia[];
   minutos_trabalhados_total: number;
@@ -108,4 +112,24 @@ export interface CampusDTO {
   latitude_central: number;
   longitude_central: number;
   raio_permitido_metros: number;
+}
+
+export interface PerfilDTO {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  ativo: boolean;
+  total_usuarios: number;
+}
+
+/** Usuario que bate ponto, como o RH ve no cadastro. */
+export interface UsuarioDTO {
+  id: string;
+  nome: string;
+  cpf: string;
+  email: string;
+  curso_vinculado: string;
+  perfil: { id: string; nome: string } | null;
+  ativo: boolean;
+  criado_em: string;
 }

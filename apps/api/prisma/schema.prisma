@@ -40,6 +40,10 @@ enum AcaoAuditoria {
   TENTATIVA_CHECKIN
   APROVACAO_MANUAL
   REJEICAO_MANUAL
+  USUARIO_CRIADO
+  USUARIO_ATUALIZADO
+  PERFIL_CRIADO
+  PERFIL_ATUALIZADO
 }
 
 enum ResultadoAuditoria {
@@ -48,6 +52,9 @@ enum ResultadoAuditoria {
   ERRO
 }
 
+/// Usuario que bate ponto (app mobile ou painel web do usuario). O nome do
+/// model e da tabela ficou "professor" por historico do MVP; o tipo de vinculo
+/// (professor, estagiario, estudante...) vem do `perfil`, cadastrado pelo RH.
 model Professor {
   id             String   @id @default(uuid()) @db.Uuid
   nome           String   @db.VarChar(160)
@@ -55,17 +62,36 @@ model Professor {
   email          String   @unique @db.VarChar(160)
   senhaHash      String   @map("senha_hash")
   cursoVinculado String   @map("curso_vinculado") @db.VarChar(120)
+  perfilId       String?  @map("perfil_id") @db.Uuid
   ativo          Boolean  @default(true)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
+  perfil        Perfil?         @relation(fields: [perfilId], references: [id], onDelete: SetNull)
   registros     RegistroPonto[]
   refreshTokens RefreshToken[]
   auditorias    LogAuditoria[]
 
   @@index([cursoVinculado])
   @@index([ativo])
+  @@index([perfilId])
   @@map("professores")
+}
+
+/// Tipo de vinculo do usuario (Professor, Estagiario, Estudante...). O RH cria
+/// e renomeia perfis pelo dashboard; desativar um perfil so o esconde dos
+/// formularios, sem mexer nos usuarios que ja o usam.
+model Perfil {
+  id        String   @id @default(uuid()) @db.Uuid
+  nome      String   @unique @db.VarChar(60)
+  descricao String?  @db.VarChar(200)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  usuarios Professor[]
+
+  @@map("perfis")
 }
 
 /// Usuario de RH/coordenacao que acessa o dashboard. Papel separado do professor:

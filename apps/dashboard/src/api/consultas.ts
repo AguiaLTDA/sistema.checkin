@@ -1,7 +1,13 @@
 import type {
+  AtualizarPerfilBody,
+  AtualizarUsuarioBody,
+  CriarPerfilBody,
+  CriarUsuarioBody,
+  PerfilDTO,
   RegistroPontoDTO,
   RelatorioJornada,
   RespostaPaginada,
+  UsuarioDTO,
 } from '@univc/shared';
 import { comQuery, requisitar } from './cliente';
 
@@ -11,6 +17,7 @@ export interface ProfessorResumo {
   email: string;
   curso_vinculado: string;
   ativo: boolean;
+  perfil: string | null;
 }
 
 export interface FiltrosRegistros {
@@ -18,6 +25,7 @@ export interface FiltrosRegistros {
   por_pagina?: number;
   professor_id?: string;
   curso?: string;
+  perfil_id?: string;
   status?: string;
   tipo?: string;
   data_inicio?: string;
@@ -54,6 +62,41 @@ export function buscarRelatorioJornada(filtros: {
   data_fim: string;
   professor_id?: string;
   curso?: string;
+  perfil_id?: string;
 }): Promise<RelatorioJornada> {
   return requisitar(comQuery('/admin/relatorio-jornada', { ...filtros }));
+}
+
+// ---------------------------------------------------------------------------
+// Cadastro de usuarios e perfis
+// ---------------------------------------------------------------------------
+
+export function listarPerfis(): Promise<{ dados: PerfilDTO[] }> {
+  return requisitar('/admin/perfis');
+}
+
+export function criarPerfil(corpo: CriarPerfilBody): Promise<{ perfil: PerfilDTO }> {
+  return requisitar('/admin/perfis', { metodo: 'POST', corpo });
+}
+
+export function atualizarPerfil(
+  id: string,
+  corpo: AtualizarPerfilBody,
+): Promise<{ perfil: PerfilDTO }> {
+  return requisitar(`/admin/perfis/${id}`, { metodo: 'PATCH', corpo });
+}
+
+export function listarUsuarios(): Promise<{ dados: UsuarioDTO[] }> {
+  return requisitar('/admin/usuarios');
+}
+
+export function criarUsuario(corpo: CriarUsuarioBody): Promise<{ usuario: UsuarioDTO }> {
+  return requisitar('/admin/usuarios', { metodo: 'POST', corpo });
+}
+
+export function atualizarUsuario(
+  id: string,
+  corpo: AtualizarUsuarioBody,
+): Promise<{ usuario: UsuarioDTO }> {
+  return requisitar(`/admin/usuarios/${id}`, { metodo: 'PATCH', corpo });
 }

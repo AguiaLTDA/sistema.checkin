@@ -78,7 +78,7 @@ export function Pendentes() {
   return (
     <div className="flex flex-col gap-6">
       <Alerta tom="info">
-        Registros ficam pendentes quando o professor estava fora do raio do
+        Registros ficam pendentes quando o usuario estava fora do raio do
         campus, quando a biometria nao foi confirmada no aparelho ou quando o
         ponto foi sincronizado depois de um periodo offline. A aprovacao exige
         justificativa, que fica gravada na trilha de auditoria.

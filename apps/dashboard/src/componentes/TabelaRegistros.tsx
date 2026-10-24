@@ -19,8 +19,8 @@ export function TabelaRegistros({ registros, acoes }: Props) {
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-            <th className="px-3 py-2 font-semibold">Professor</th>
-            <th className="px-3 py-2 font-semibold">Curso</th>
+            <th className="px-3 py-2 font-semibold">Usuario</th>
+            <th className="px-3 py-2 font-semibold">Perfil / curso</th>
             <th className="px-3 py-2 font-semibold">Tipo</th>
             <th className="px-3 py-2 font-semibold">Horario (servidor)</th>
             <th className="px-3 py-2 font-semibold">Distancia</th>
@@ -41,7 +41,12 @@ export function TabelaRegistros({ registros, acoes }: Props) {
                 </p>
               </td>
               <td className="px-3 py-3 text-slate-600">
-                {registro.professor?.curso_vinculado ?? '—'}
+                <p className="font-medium text-slate-700">
+                  {registro.professor?.perfil ?? '—'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {registro.professor?.curso_vinculado ?? '—'}
+                </p>
               </td>
               <td className="px-3 py-3">
                 <span

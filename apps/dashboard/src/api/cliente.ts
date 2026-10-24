@@ -2,10 +2,6 @@ import type { ErroApi, RespostaLogin } from '@univc/shared';
 
 const URL_API = import.meta.env.VITE_API_URL ?? 'http://localhost:3333';
 
-const CHAVE_ACCESS = 'univc.admin.access_token';
-const CHAVE_REFRESH = 'univc.admin.refresh_token';
-const CHAVE_USUARIO = 'univc.admin.usuario';
-
 export class ErroRequisicao extends Error {
   readonly status: number;
   readonly codigo: string;
@@ -20,23 +16,41 @@ export class ErroRequisicao extends Error {
   }
 }
 
-export const sessao = {
-  accessToken: () => localStorage.getItem(CHAVE_ACCESS),
-  refreshToken: () => localStorage.getItem(CHAVE_REFRESH),
-  usuario: (): RespostaLogin['usuario'] | null => {
-    const bruto = localStorage.getItem(CHAVE_USUARIO);
-    return bruto ? (JSON.parse(bruto) as RespostaLogin['usuario']) : null;
-  },
-  salvar(resposta: RespostaLogin) {
-    localStorage.setItem(CHAVE_ACCESS, resposta.access_token);
-    localStorage.setItem(CHAVE_REFRESH, resposta.refresh_token);
-    localStorage.setItem(CHAVE_USUARIO, JSON.stringify(resposta.usuario));
-  },
-  limpar() {
-    localStorage.removeItem(CHAVE_ACCESS);
-    localStorage.removeItem(CHAVE_REFRESH);
-    localStorage.removeItem(CHAVE_USUARIO);
-  },
+/**
+ * O painel tem duas areas com logins independentes: a do RH (`rh`) e a do
+ * usuario que bate ponto (`usuario`). Cada uma guarda a propria sessao, entao
+ * da para ter as duas abertas no mesmo navegador.
+ */
+export type Escopo = 'rh' | 'usuario';
+
+function criarSessao(prefixo: string) {
+  const chaveAccess = `${prefixo}.access_token`;
+  const chaveRefresh = `${prefixo}.refresh_token`;
+  const chaveUsuario = `${prefixo}.usuario`;
+
+  return {
+    accessToken: () => localStorage.getItem(chaveAccess),
+    refreshToken: () => localStorage.getItem(chaveRefresh),
+    usuario: (): RespostaLogin['usuario'] | null => {
+      const bruto = localStorage.getItem(chaveUsuario);
+      return bruto ? (JSON.parse(bruto) as RespostaLogin['usuario']) : null;
+    },
+    salvar(resposta: RespostaLogin) {
+      localStorage.setItem(chaveAccess, resposta.access_token);
+      localStorage.setItem(chaveRefresh, resposta.refresh_token);
+      localStorage.setItem(chaveUsuario, JSON.stringify(resposta.usuario));
+    },
+    limpar() {
+      localStorage.removeItem(chaveAccess);
+      localStorage.removeItem(chaveRefresh);
+      localStorage.removeItem(chaveUsuario);
+    },
+  };
+}
+
+export const sessoes: Record<Escopo, ReturnType<typeof criarSessao>> = {
+  rh: criarSessao('univc.admin'),
+  usuario: criarSessao('univc.usuario'),
 };
 
 async function lerErro(resposta: Response): Promise<never> {
@@ -50,7 +64,8 @@ async function lerErro(resposta: Response): Promise<never> {
 }
 
 /** Troca o refresh token por um novo par. Retorna false se a sessao acabou. */
-async function renovarSessao(): Promise<boolean> {
+async function renovarSessao(escopo: Escopo): Promise<boolean> {
+  const sessao = sessoes[escopo];
   const refreshToken = sessao.refreshToken();
   if (!refreshToken) return false;
 
@@ -73,17 +88,20 @@ interface OpcoesRequisicao {
   metodo?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   corpo?: unknown;
   autenticado?: boolean;
+  escopo?: Escopo;
 }
 
 /**
- * Chamada HTTP com token de admin. Ao receber 401 tenta renovar a sessao uma
- * vez e repete a requisicao; se o refresh tambem falhar, limpa a sessao.
+ * Chamada HTTP com o token do escopo (RH por padrao). Ao receber 401 tenta
+ * renovar a sessao uma vez e repete a requisicao; se o refresh tambem falhar,
+ * limpa a sessao.
  */
 export async function requisitar<T>(
   caminho: string,
   opcoes: OpcoesRequisicao = {},
 ): Promise<T> {
-  const { metodo = 'GET', corpo, autenticado = true } = opcoes;
+  const { metodo = 'GET', corpo, autenticado = true, escopo = 'rh' } = opcoes;
+  const sessao = sessoes[escopo];
 
   const enviar = async (): Promise<Response> => {
     const headers: Record<string, string> = {};
@@ -102,7 +120,7 @@ export async function requisitar<T>(
 
   let resposta = await enviar();
 
-  if (resposta.status === 401 && autenticado && (await renovarSessao())) {
+  if (resposta.status === 401 && autenticado && (await renovarSessao(escopo))) {
     resposta = await enviar();
   }
 
@@ -112,20 +130,26 @@ export async function requisitar<T>(
   return (await resposta.json()) as T;
 }
 
-export async function entrarComoAdmin(
+/** Login do RH em /auth/admin/login ou do usuario em /auth/login. */
+export async function entrar(
+  escopo: Escopo,
   email: string,
   senha: string,
 ): Promise<RespostaLogin> {
-  const resposta = await requisitar<RespostaLogin>('/auth/admin/login', {
-    metodo: 'POST',
-    corpo: { email, senha },
-    autenticado: false,
-  });
-  sessao.salvar(resposta);
+  const resposta = await requisitar<RespostaLogin>(
+    escopo === 'rh' ? '/auth/admin/login' : '/auth/login',
+    {
+      metodo: 'POST',
+      corpo: { email, senha },
+      autenticado: false,
+    },
+  );
+  sessoes[escopo].salvar(resposta);
   return resposta;
 }
 
-export async function sairDaSessao(): Promise<void> {
+export async function sairDaSessao(escopo: Escopo): Promise<void> {
+  const sessao = sessoes[escopo];
   const refreshToken = sessao.refreshToken();
   if (refreshToken) {
     await requisitar('/auth/logout', {

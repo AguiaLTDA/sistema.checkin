@@ -29,7 +29,10 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
   app.post('/auth/login', async (request, reply) => {
     const { email, senha } = validar(loginBodySchema, request.body);
 
-    const professor = await prisma.professor.findUnique({ where: { email } });
+    const professor = await prisma.professor.findUnique({
+      where: { email },
+      include: { perfil: true },
+    });
     const senhaConfere = await conferirSenha(
       senha,
       professor?.senhaHash ?? HASH_FICTICIO,
@@ -136,6 +139,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
     if (payload.papel === 'PROFESSOR') {
       const professor = await prisma.professor.findUnique({
         where: { id: payload.sub },
+        include: { perfil: true },
       });
       if (!professor || !professor.ativo) {
         throw erroNaoAutenticado('Professor inativo ou inexistente.');
@@ -201,6 +205,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
       const usuario = usuarioAutenticado(request);
       const professor = await prisma.professor.findUniqueOrThrow({
         where: { id: usuario.id },
+        include: { perfil: true },
       });
       return reply.send({ usuario: professorParaUsuario(professor) });
     },

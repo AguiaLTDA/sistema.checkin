@@ -36,6 +36,7 @@ export function Jornada() {
           data_fim: filtros.data_fim,
           professor_id: filtros.professor_id || undefined,
           curso: filtros.curso || undefined,
+          perfil_id: filtros.perfil_id || undefined,
         }),
       );
     } catch (falha) {
@@ -47,7 +48,13 @@ export function Jornada() {
     } finally {
       setCarregando(false);
     }
-  }, [filtros.data_inicio, filtros.data_fim, filtros.professor_id, filtros.curso]);
+  }, [
+    filtros.data_inicio,
+    filtros.data_fim,
+    filtros.professor_id,
+    filtros.curso,
+    filtros.perfil_id,
+  ]);
 
   useEffect(() => {
     void carregar();
@@ -120,6 +127,7 @@ export function Jornada() {
                     {linha.professor.nome}
                   </p>
                   <p className="text-xs text-slate-500">
+                    {linha.professor.perfil ?? 'Sem perfil'} ·{' '}
                     {linha.professor.curso_vinculado} — {linha.professor.email}
                   </p>
                 </div>

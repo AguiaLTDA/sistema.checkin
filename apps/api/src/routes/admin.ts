@@ -42,8 +42,13 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
       ...(query.status ? { status: query.status } : {}),
       ...(query.tipo ? { tipo: query.tipo } : {}),
       ...(periodo ? { timestampServidor: periodo } : {}),
-      ...(query.curso
-        ? { professor: { cursoVinculado: { equals: query.curso } } }
+      ...(query.curso || query.perfil_id
+        ? {
+            professor: {
+              ...(query.curso ? { cursoVinculado: { equals: query.curso } } : {}),
+              ...(query.perfil_id ? { perfilId: query.perfil_id } : {}),
+            },
+          }
         : {}),
     };
 
@@ -51,7 +56,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
       prisma.registroPonto.count({ where }),
       prisma.registroPonto.findMany({
         where,
-        include: { campus: true, professor: true },
+        include: { campus: true, professor: { include: { perfil: true } } },
         orderBy: { timestampServidor: 'desc' },
         skip: (query.pagina - 1) * query.por_pagina,
         take: query.por_pagina,
@@ -104,7 +109,9 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
       where: {
         ...(query.professor_id ? { id: query.professor_id } : {}),
         ...(query.curso ? { cursoVinculado: { equals: query.curso } } : {}),
+        ...(query.perfil_id ? { perfilId: query.perfil_id } : {}),
       },
+      include: { perfil: true },
       orderBy: { nome: 'asc' },
     });
 
@@ -155,6 +162,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
           nome: professor.nome,
           email: professor.email,
           curso_vinculado: professor.cursoVinculado,
+          perfil: professor.perfil?.nome ?? null,
         },
         dias,
         minutos_trabalhados_total: minutosTotal,
@@ -188,6 +196,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
         email: true,
         cursoVinculado: true,
         ativo: true,
+        perfil: { select: { nome: true } },
       },
     });
 
@@ -198,6 +207,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
         email: professor.email,
         curso_vinculado: professor.cursoVinculado,
         ativo: professor.ativo,
+        perfil: professor.perfil?.nome ?? null,
       })),
     });
   });
@@ -256,7 +266,7 @@ async function decidirRegistro(
       decididoPor: admin.id,
       decididoEm: new Date(),
     },
-    include: { campus: true, professor: true },
+    include: { campus: true, professor: { include: { perfil: true } } },
   });
 
   await registrarAuditoria(request, {

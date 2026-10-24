@@ -21,6 +21,7 @@ como `PENDENTE_APROVACAO` e o RH decide, com justificativa obrigatória.
 - [Arquitetura](#arquitetura)
 - [Subindo o ambiente](#subindo-o-ambiente)
 - [Usuários de teste](#usuários-de-teste)
+- [Painel web (RH + usuário)](#4-painel-web-rh--usuário)
 - [Rodando o app no Expo Go](#rodando-o-app-no-expo-go)
 - [Testando o fluxo completo](#testando-o-fluxo-completo)
 - [API](#api)
@@ -138,13 +139,43 @@ tabelas novas (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY` na migration).
 Não aponte `DATABASE_URL_TEST` para o Supabase: os testes de integração
 truncam as tabelas.
 
-### 4. Dashboard do RH
+### 4. Painel web (RH + usuário)
 
-O dashboard não está no compose (roda direto pelo Vite):
+O painel não está no compose (roda direto pelo Vite):
 
 ```bash
 npm run dev:dashboard       # http://localhost:5173
 ```
+
+Ele tem três áreas, cada uma com login próprio (as duas sessões convivem no
+mesmo navegador):
+
+| Endereço   | Para quem                                  | O que tem |
+| ---------- | ------------------------------------------ | --------- |
+| `/`        | todos                                      | página inicial com os dois acessos centralizados e a lista de funcionalidades de cada um |
+| `/rh`      | RH e coordenação (login em `/auth/admin/login`) | registros, aprovações pendentes, relatório de jornada, **cadastro de usuários** e **perfis** |
+| `/usuario` | professores, estagiários e estudantes (login em `/auth/login`) | marcar chegada/saída com a localização do navegador, último registro e histórico |
+
+Os dois painéis têm um botão no cabeçalho que leva ao outro. Pelo navegador não
+há confirmação biométrica, então o ponto marcado no Painel do Usuário vai como
+`metodo_biometrico: NENHUM` e fica **pendente de aprovação do RH**; pelo app
+mobile, com Face ID ou digital, ele é validado na hora (regra em
+`apps/api/src/lib/validacao-checkin.ts`). A localização do navegador só funciona
+em HTTPS ou em `localhost`.
+
+Screenshots de cada tela ficam em [`docs/telas/`](docs/telas/).
+
+#### Usuários e perfis
+
+- **Perfis** (`/rh/perfis`): a migration cria *Professor*, *Estagiário* e
+  *Estudante*. O RH cria outros, renomeia (o novo nome vale para todos os
+  usuários do perfil) e desativa (o perfil some do cadastro, mas quem já o usa
+  continua com ele).
+- **Usuários** (`/rh/usuarios`): o RH cria o acesso com nome, CPF, email (que é
+  o login), curso ou setor, perfil e senha inicial. Depois pode editar,
+  redefinir a senha e desativar. Desativar ou trocar a senha encerra as sessões
+  abertas do usuário na hora; o histórico de registros é mantido.
+- Os filtros de registros, pendentes e jornada aceitam filtrar por perfil.
 
 > A API só aceita as origens listadas em `CORS_ORIGINS` no `.env`. A porta 5173
 > já está liberada; se mudar a porta do Vite, acrescente a nova origem lá.
@@ -166,21 +197,23 @@ npm run dev:dashboard       # http://localhost:5173
 
 Criados pelo seed (`apps/api/prisma/seed.ts`):
 
-**Dashboard (RH/coordenação) — `http://localhost:5173`**
+**Painel do RH — `http://localhost:5173/rh`**
 
 | Email         | Senha      |
 | ------------- | ---------- |
 | `rh@univc.br` | `admin123` |
 
-**App mobile (professores) — senha `senha123` para todos**
+**Painel do Usuário (`http://localhost:5173/usuario`) e app mobile — senha `senha123` para todos**
 
-| Email                       | Curso               |
-| --------------------------- | ------------------- |
-| `ana.rocha@univc.br`        | Direito             |
-| `carlos.menezes@univc.br`   | Odontologia         |
-| `mariana.prado@univc.br`    | Enfermagem          |
-| `rafael.portela@univc.br`   | Medicina Veterinária |
-| `juliana.lima@univc.br`     | Administração       |
+| Email                       | Perfil     | Curso               |
+| --------------------------- | ---------- | ------------------- |
+| `ana.rocha@univc.br`        | Professor  | Direito             |
+| `carlos.menezes@univc.br`   | Professor  | Odontologia         |
+| `mariana.prado@univc.br`    | Professor  | Enfermagem          |
+| `rafael.portela@univc.br`   | Professor  | Medicina Veterinária |
+| `juliana.lima@univc.br`     | Professor  | Administração       |
+| `lucas.dias@univc.br`       | Estagiário | Análise e Desenvolvimento de Sistemas |
+| `beatriz.ramos@univc.br`    | Estudante  | Psicologia          |
 
 **Campus cadastrado**
 
@@ -308,6 +341,15 @@ Não existe campo de horário: o `timestamp_servidor` é sempre `now()` no backe
 | `GET`   | `/admin/professores`              | lista para os filtros do dashboard                  |
 | `GET`   | `/admin/cursos`                   | cursos distintos                                    |
 | `GET`   | `/admin/campi`                    | campi cadastrados                                   |
+| `GET`   | `/admin/usuarios`                 | usuários cadastrados, com perfil                    |
+| `POST`  | `/admin/usuarios`                 | cria usuário (`nome`, `cpf`, `email`, `senha`, `curso_vinculado`, `perfil_id`) |
+| `PATCH` | `/admin/usuarios/:id`             | edita, redefine `senha` ou muda `ativo`; senha nova/desativação revogam as sessões |
+| `GET`   | `/admin/perfis`                   | perfis com total de usuários                        |
+| `POST`  | `/admin/perfis`                   | cria perfil (`nome`, `descricao`)                   |
+| `PATCH` | `/admin/perfis/:id`               | renomeia, muda a descrição ou ativa/desativa        |
+
+`/admin/registros` e `/admin/relatorio-jornada` também aceitam `perfil_id`.
+Email ou CPF repetido responde 409.
 
 ### Middlewares
 

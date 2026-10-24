@@ -1,11 +1,13 @@
 import { STATUS_REGISTRO, TIPOS_REGISTRO } from '@univc/shared';
 import { ROTULOS_STATUS, ROTULOS_TIPO } from '@univc/shared';
 import { useEffect, useState } from 'react';
-import { listarCursos, listarProfessores } from '../api/consultas';
+import type { PerfilDTO } from '@univc/shared';
+import { listarCursos, listarPerfis, listarProfessores } from '../api/consultas';
 import type { ProfessorResumo } from '../api/consultas';
 import { Botao, Campo, classesInput } from './ui';
 
 export interface ValoresFiltro {
+  perfil_id: string;
   curso: string;
   professor_id: string;
   status: string;
@@ -15,6 +17,7 @@ export interface ValoresFiltro {
 }
 
 export const FILTRO_VAZIO: ValoresFiltro = {
+  perfil_id: '',
   curso: '',
   professor_id: '',
   status: '',
@@ -23,10 +26,11 @@ export const FILTRO_VAZIO: ValoresFiltro = {
   data_fim: '',
 };
 
-/** Carrega professores e cursos uma vez, para popular os selects de filtro. */
+/** Carrega usuarios, cursos e perfis uma vez, para popular os selects de filtro. */
 export function useDadosDeFiltro() {
   const [professores, setProfessores] = useState<ProfessorResumo[]>([]);
   const [cursos, setCursos] = useState<string[]>([]);
+  const [perfis, setPerfis] = useState<PerfilDTO[]>([]);
 
   useEffect(() => {
     void listarProfessores()
@@ -35,9 +39,12 @@ export function useDadosDeFiltro() {
     void listarCursos()
       .then((resposta) => setCursos(resposta.dados))
       .catch(() => setCursos([]));
+    void listarPerfis()
+      .then((resposta) => setPerfis(resposta.dados))
+      .catch(() => setPerfis([]));
   }, []);
 
-  return { professores, cursos };
+  return { professores, cursos, perfis };
 }
 
 interface Props {
@@ -47,18 +54,40 @@ interface Props {
 }
 
 export function FiltrosRegistros({ valores, aoMudar, camposOcultos = [] }: Props) {
-  const { professores, cursos } = useDadosDeFiltro();
+  const { professores, cursos, perfis } = useDadosDeFiltro();
   const visivel = (campo: keyof ValoresFiltro) => !camposOcultos.includes(campo);
 
   const atualizar = (campo: keyof ValoresFiltro, valor: string) =>
     aoMudar({ ...valores, [campo]: valor });
 
-  const professoresFiltrados = valores.curso
-    ? professores.filter((professor) => professor.curso_vinculado === valores.curso)
-    : professores;
+  const perfilSelecionado = perfis.find((perfil) => perfil.id === valores.perfil_id);
+  const professoresFiltrados = professores.filter(
+    (professor) =>
+      (!valores.curso || professor.curso_vinculado === valores.curso) &&
+      (!perfilSelecionado || professor.perfil === perfilSelecionado.nome),
+  );
 
   return (
     <div className="flex flex-wrap items-end gap-4">
+      {visivel('perfil_id') && (
+        <Campo rotulo="Perfil">
+          <select
+            className={classesInput}
+            value={valores.perfil_id}
+            onChange={(evento) =>
+              aoMudar({ ...valores, perfil_id: evento.target.value, professor_id: '' })
+            }
+          >
+            <option value="">Todos</option>
+            {perfis.map((perfil) => (
+              <option key={perfil.id} value={perfil.id}>
+                {perfil.nome}
+              </option>
+            ))}
+          </select>
+        </Campo>
+      )}
+
       {visivel('curso') && (
         <Campo rotulo="Curso">
           <select
@@ -84,7 +113,7 @@ export function FiltrosRegistros({ valores, aoMudar, camposOcultos = [] }: Props
       )}
 
       {visivel('professor_id') && (
-        <Campo rotulo="Professor">
+        <Campo rotulo="Usuario">
           <select
             className={classesInput}
             value={valores.professor_id}

@@ -482,13 +482,17 @@ sem precisar de `prisma studio`:
 - **Ativar/Desativar** — desliga o acesso sem apagar o histórico.
 - **Apagar** — remove o usuário definitivamente, e os registros de ponto
   dele saem junto (cascade no schema). Ação irreversível, com confirmação.
+- **Minha conta** (`/rh/conta`, pelo nome no cabeçalho) — o RH logado edita o
+  próprio nome e email (o email é o login) e troca a própria senha, informando
+  a senha atual. A troca de senha encerra todas as sessões do RH, então é
+  preciso entrar de novo. Não há tela para editar outro administrador.
 - **Perfis** — *Professor*, *Estagiário* e *Estudante* já vêm criados; o RH
   cria outros, renomeia e desativa (perfil desativado some do cadastro, mas
   quem já o usa continua com ele).
 
 Toda criação, edição e exclusão gera uma entrada em `logs_auditoria`
 (`CRIACAO_PROFESSOR`, `EDICAO_PROFESSOR`, `EXCLUSAO_PROFESSOR`, `PERFIL_CRIADO`,
-`PERFIL_ATUALIZADO`).
+`PERFIL_ATUALIZADO`, `EDICAO_ADMIN`, `ALTERACAO_SENHA`).
 
 ### Professor
 
@@ -530,6 +534,8 @@ funcionando — o campo é simplesmente ignorado.
 | `PATCH` | `/admin/professores/:id/redefinir-senha` | gera senha temporária e força troca no próximo login |
 | `GET`   | `/admin/cursos`                   | cursos distintos                                    |
 | `GET`   | `/admin/campi`                    | campi cadastrados                                   |
+| `PATCH` | `/admin/conta`                    | o RH logado edita o próprio nome e/ou email (email repetido responde 409) |
+| `PATCH` | `/admin/conta/senha`              | o RH logado troca a própria senha (`senha_atual` + `senha_nova`); encerra as sessões do RH |
 | `GET`   | `/admin/perfis`                   | perfis com total de usuários                        |
 | `POST`  | `/admin/perfis`                   | cria perfil (`nome`, `descricao`)                   |
 | `PATCH` | `/admin/perfis/:id`               | renomeia, muda a descrição ou ativa/desativa        |

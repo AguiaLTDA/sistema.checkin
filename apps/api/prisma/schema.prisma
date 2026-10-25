@@ -39,6 +39,7 @@ enum AcaoAuditoria {
   EXCLUSAO_PROFESSOR
   PERFIL_CRIADO
   PERFIL_ATUALIZADO
+  EDICAO_ADMIN
 }
 
 enum ResultadoAuditoria {

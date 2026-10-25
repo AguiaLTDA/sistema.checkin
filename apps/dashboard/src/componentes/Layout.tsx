@@ -33,7 +33,13 @@ export function Layout() {
             >
               Painel do Usuario →
             </Link>
-            <span className="text-univc-100">{usuario?.nome}</span>
+            <Link
+              to="/rh/conta"
+              title="Editar meus dados"
+              className="text-univc-100 underline-offset-4 hover:text-white hover:underline"
+            >
+              {usuario?.nome} · Minha conta
+            </Link>
             <button
               type="button"
               onClick={() => void sair()}

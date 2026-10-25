@@ -8,6 +8,7 @@ import { ErroHttp } from './lib/erros.js';
 import { rotasAdmin } from './routes/admin.js';
 import { rotasAuth } from './routes/auth.js';
 import { rotasCheckin } from './routes/checkin.js';
+import { rotasConta } from './routes/conta.js';
 import { rotasPerfis } from './routes/perfis.js';
 
 export async function construirApp(): Promise<FastifyInstance> {
@@ -100,6 +101,7 @@ export async function construirApp(): Promise<FastifyInstance> {
   await app.register(rotasCheckin);
   await app.register(rotasAdmin);
   await app.register(rotasPerfis);
+  await app.register(rotasConta);
 
   return app;
 }

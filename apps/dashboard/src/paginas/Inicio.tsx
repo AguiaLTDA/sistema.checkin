@@ -23,6 +23,7 @@ const AREAS: Area[] = [
       'Relatorio de jornada com horas trabalhadas e exportacao CSV',
       'Cadastro de usuarios: criar, editar, desativar, apagar e redefinir senha',
       'Perfis: Professor, Estagiario, Estudante e outros que o RH criar',
+      'Minha conta: editar o proprio nome, email e senha',
     ],
   },
   {

@@ -169,6 +169,31 @@ export async function alterarSenha(
   return resposta.usuario;
 }
 
+/** Edita nome/email do RH logado e atualiza a sessao salva no navegador. */
+export async function atualizarContaRh(dados: {
+  nome?: string;
+  email?: string;
+}): Promise<RespostaLogin['usuario']> {
+  const resposta = await requisitar<{ usuario: RespostaLogin['usuario'] }>(
+    '/admin/conta',
+    { metodo: 'PATCH', corpo: dados, escopo: 'rh' },
+  );
+  sessoes.rh.atualizarUsuario(resposta.usuario);
+  return resposta.usuario;
+}
+
+/** Troca a senha do RH logado. A API derruba as sessoes: entre de novo depois. */
+export async function alterarSenhaRh(
+  senhaAtual: string,
+  senhaNova: string,
+): Promise<void> {
+  await requisitar('/admin/conta/senha', {
+    metodo: 'PATCH',
+    corpo: { senha_atual: senhaAtual, senha_nova: senhaNova },
+    escopo: 'rh',
+  });
+}
+
 export async function sairDaSessao(escopo: Escopo): Promise<void> {
   const sessao = sessoes[escopo];
   const refreshToken = sessao.refreshToken();

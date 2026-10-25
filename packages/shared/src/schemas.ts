@@ -213,3 +213,19 @@ export const atualizarPerfilBodySchema = z
     message: 'envie ao menos um campo para atualizar',
   });
 export type AtualizarPerfilBody = z.infer<typeof atualizarPerfilBodySchema>;
+
+// ---------------------------------------------------------------------------
+// Conta do proprio RH (administrador logado)
+// ---------------------------------------------------------------------------
+
+/** Corpo do PATCH /admin/conta: o RH edita os proprios dados de cadastro. */
+export const atualizarContaAdminBodySchema = z
+  .object({
+    nome: z.string().trim().min(3, 'nome deve ter ao menos 3 caracteres').max(160),
+    email: z.string().trim().toLowerCase().email('email invalido').max(160),
+  })
+  .partial()
+  .refine((dados) => Object.keys(dados).length > 0, {
+    message: 'Informe ao menos um campo para atualizar.',
+  });
+export type AtualizarContaAdminBody = z.infer<typeof atualizarContaAdminBodySchema>;

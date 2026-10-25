@@ -4,6 +4,7 @@ import { useAuth } from './contexto/AuthContext';
 import { Inicio } from './paginas/Inicio';
 import { Jornada } from './paginas/Jornada';
 import { Login } from './paginas/Login';
+import { MinhaConta } from './paginas/MinhaConta';
 import { PainelUsuario } from './paginas/PainelUsuario';
 import { Pendentes } from './paginas/Pendentes';
 import { Perfis } from './paginas/Perfis';
@@ -44,6 +45,7 @@ function AreaRh() {
         <Route path="jornada" element={<Jornada />} />
         <Route path="usuarios" element={<Professores />} />
         <Route path="perfis" element={<Perfis />} />
+        <Route path="conta" element={<MinhaConta />} />
         <Route path="professores" element={<Navigate to="/rh/usuarios" replace />} />
         <Route path="*" element={<Navigate to="/rh/registros" replace />} />
       </Route>

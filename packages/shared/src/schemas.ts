@@ -1,12 +1,11 @@
 import { z } from 'zod';
-import {
-  METODOS_BIOMETRICOS,
-  STATUS_REGISTRO,
-  TIPOS_REGISTRO,
-} from './enums.js';
+import { STATUS_REGISTRO, TIPOS_REGISTRO } from './enums.js';
 
 /**
  * Contratos de entrada da API, em snake_case (formato do payload HTTP).
+ *
+ * O check-in e validado exclusivamente pela localizacao: latitude e longitude
+ * sao obrigatorias e nao existe campo de biometria em nenhum schema.
  *
  * Observacao importante sobre horario: nenhum schema de check-in aceita um
  * campo de "horario do registro". O `timestamp_servidor` e sempre gerado pelo
@@ -42,20 +41,35 @@ export const refreshBodySchema = z.object({
 });
 export type RefreshBody = z.infer<typeof refreshBodySchema>;
 
+/**
+ * Corpo do PATCH /auth/senha. Exige a senha atual (a temporaria, no primeiro
+ * acesso depois de um reset do RH, ou a de sempre numa troca voluntaria) para
+ * confirmar que quem esta trocando e o proprio dono da conta.
+ */
+export const alterarSenhaBodySchema = z
+  .object({
+    senha_atual: z.string().min(6, 'senha_atual deve ter ao menos 6 caracteres'),
+    senha_nova: z.string().min(6, 'senha_nova deve ter ao menos 6 caracteres'),
+  })
+  .refine((dados) => dados.senha_nova !== dados.senha_atual, {
+    message: 'senha_nova deve ser diferente da senha_atual',
+    path: ['senha_nova'],
+  });
+export type AlterarSenhaBody = z.infer<typeof alterarSenhaBodySchema>;
+
 // ---------------------------------------------------------------------------
 // Check-in
 // ---------------------------------------------------------------------------
 
+/**
+ * Corpo do POST /checkin. A presenca e comprovada apenas pela coordenada
+ * enviada no momento do registro; latitude e longitude sao obrigatorias.
+ */
 export const checkinBodySchema = z
   .object({
     tipo: z.enum(TIPOS_REGISTRO),
     latitude: latitudeSchema,
     longitude: longitudeSchema,
-    /**
-     * Rotulo do metodo biometrico validado localmente no aparelho.
-     * NUNCA recebe imagem, template ou qualquer dado biometrico bruto.
-     */
-    metodo_biometrico: z.enum(METODOS_BIOMETRICOS),
     /** Precisao reportada pelo GPS do aparelho, em metros (opcional). */
     precisao_metros: z.number().nonnegative().max(100000).optional(),
     /** true quando o registro veio da fila offline do app. */
@@ -105,6 +119,7 @@ export const adminRegistrosQuerySchema = z.object({
   ...periodoSchema,
   professor_id: z.string().uuid().optional(),
   curso: z.string().trim().min(1).optional(),
+  perfil_id: z.string().uuid().optional(),
   tipo: z.enum(TIPOS_REGISTRO).optional(),
   status: z.enum(STATUS_REGISTRO).optional(),
 });
@@ -124,9 +139,77 @@ export const relatorioJornadaQuerySchema = z.object({
   data_fim: z.string().min(4, 'data_fim e obrigatoria'),
   professor_id: z.string().uuid().optional(),
   curso: z.string().trim().min(1).optional(),
+  perfil_id: z.string().uuid().optional(),
 });
 export type RelatorioJornadaQuery = z.infer<typeof relatorioJornadaQuerySchema>;
 
 export const idParamSchema = z.object({
   id: z.string().uuid('id invalido'),
 });
+
+export const cpfSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{11}$/, 'cpf deve conter 11 digitos numericos');
+
+/** Corpo do POST /admin/professores (cadastro de um novo usuario pelo RH). */
+export const professorCriarBodySchema = z.object({
+  nome: z.string().trim().min(3, 'nome deve ter ao menos 3 caracteres').max(160),
+  cpf: cpfSchema,
+  email: z.string().trim().toLowerCase().email('email invalido'),
+  curso_vinculado: z
+    .string()
+    .trim()
+    .min(1, 'curso_vinculado e obrigatorio')
+    .max(120),
+  perfil_id: z.string().uuid('perfil_id invalido'),
+});
+export type ProfessorCriarBody = z.infer<typeof professorCriarBodySchema>;
+
+/** Corpo do PATCH /admin/professores/:id (edicao de cadastro pelo RH). */
+export const professorEditarBodySchema = z
+  .object({
+    nome: z.string().trim().min(3, 'nome deve ter ao menos 3 caracteres').max(160).optional(),
+    cpf: cpfSchema.optional(),
+    email: z.string().trim().toLowerCase().email('email invalido').optional(),
+    curso_vinculado: z.string().trim().min(1).max(120).optional(),
+    perfil_id: z.string().uuid('perfil_id invalido').optional(),
+    ativo: z.boolean().optional(),
+  })
+  .refine((dados) => Object.keys(dados).length > 0, {
+    message: 'Informe ao menos um campo para atualizar.',
+  });
+export type ProfessorEditarBody = z.infer<typeof professorEditarBodySchema>;
+
+// ---------------------------------------------------------------------------
+// Perfis (RH)
+// ---------------------------------------------------------------------------
+
+const nomePerfilSchema = z
+  .string()
+  .trim()
+  .min(2, 'nome do perfil deve ter ao menos 2 caracteres')
+  .max(60, 'nome do perfil deve ter no maximo 60 caracteres');
+
+const descricaoPerfilSchema = z
+  .string()
+  .trim()
+  .max(200, 'descricao deve ter no maximo 200 caracteres');
+
+export const criarPerfilBodySchema = z.object({
+  nome: nomePerfilSchema,
+  descricao: descricaoPerfilSchema.optional(),
+});
+export type CriarPerfilBody = z.infer<typeof criarPerfilBodySchema>;
+
+export const atualizarPerfilBodySchema = z
+  .object({
+    nome: nomePerfilSchema,
+    descricao: descricaoPerfilSchema.nullable(),
+    ativo: z.boolean(),
+  })
+  .partial()
+  .refine((dados) => Object.keys(dados).length > 0, {
+    message: 'envie ao menos um campo para atualizar',
+  });
+export type AtualizarPerfilBody = z.infer<typeof atualizarPerfilBodySchema>;

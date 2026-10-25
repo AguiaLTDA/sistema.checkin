@@ -19,6 +19,8 @@ interface ContextoAuth {
   carregando: boolean;
   entrar: (email: string, senha: string) => Promise<void>;
   sair: () => Promise<void>;
+  /** Atualiza o usuario em memoria (ex.: depois de trocar a senha). */
+  atualizarUsuario: (usuario: UsuarioAutenticado) => void;
 }
 
 const Contexto = createContext<ContextoAuth | null>(null);
@@ -45,9 +47,13 @@ export function ProvedorAuth({ children }: { children: ReactNode }) {
     setUsuario(null);
   }, []);
 
+  const atualizarUsuario = useCallback((novo: UsuarioAutenticado) => {
+    setUsuario(novo);
+  }, []);
+
   const valor = useMemo(
-    () => ({ usuario, carregando, entrar, sair }),
-    [usuario, carregando, entrar, sair],
+    () => ({ usuario, carregando, entrar, sair, atualizarUsuario }),
+    [usuario, carregando, entrar, sair, atualizarUsuario],
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

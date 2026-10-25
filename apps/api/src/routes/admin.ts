@@ -1,3 +1,4 @@
+import type { Professor } from '@prisma/client';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type {
   JornadaProfessor,
@@ -9,21 +10,51 @@ import {
   adminRegistrosQuerySchema,
   decisaoManualBodySchema,
   idParamSchema,
+  professorCriarBodySchema,
+  professorEditarBodySchema,
   relatorioJornadaQuerySchema,
 } from '@univc/shared';
 import { env } from '../env.js';
 import { registrarAuditoria } from '../lib/auditoria.js';
 import { filtroPeriodo, interpretarData } from '../lib/datas.js';
-import { erroConflito, erroNaoEncontrado } from '../lib/erros.js';
+import { erroConflito, erroNaoEncontrado, erroValidacao } from '../lib/erros.js';
 import {
   calcularJornada,
   formatarHoras,
   type RegistroJornada,
 } from '../lib/jornada.js';
 import { registroParaDTO } from '../lib/serializar.js';
+import { gerarHashSenha, gerarSenhaTemporaria } from '../lib/senha.js';
 import { validar } from '../lib/validacao.js';
 import { exigirAdmin, usuarioAutenticado } from '../plugins/autenticacao.js';
 import { prisma } from '../prisma.js';
+
+type ProfessorDoRh = Professor & { perfil: { id: string; nome: string } | null };
+
+/** Cadastro do usuario como o RH ve. Nunca inclui o hash da senha. */
+function professorParaRh(professor: ProfessorDoRh) {
+  return {
+    id: professor.id,
+    nome: professor.nome,
+    cpf: professor.cpf,
+    email: professor.email,
+    curso_vinculado: professor.cursoVinculado,
+    perfil: professor.perfil
+      ? { id: professor.perfil.id, nome: professor.perfil.nome }
+      : null,
+    ativo: professor.ativo,
+    deve_trocar_senha: professor.deveTrocarSenha,
+  };
+}
+
+/** Garante que o perfil existe e esta ativo antes de vincular um usuario. */
+async function exigirPerfilAtivo(perfilId: string): Promise<void> {
+  const perfil = await prisma.perfil.findUnique({ where: { id: perfilId } });
+  if (!perfil) throw erroValidacao('Perfil informado nao existe.');
+  if (!perfil.ativo) {
+    throw erroValidacao(`O perfil "${perfil.nome}" esta desativado.`);
+  }
+}
 
 export async function rotasAdmin(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', exigirAdmin);
@@ -42,8 +73,13 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
       ...(query.status ? { status: query.status } : {}),
       ...(query.tipo ? { tipo: query.tipo } : {}),
       ...(periodo ? { timestampServidor: periodo } : {}),
-      ...(query.curso
-        ? { professor: { cursoVinculado: { equals: query.curso } } }
+      ...(query.curso || query.perfil_id
+        ? {
+            professor: {
+              ...(query.curso ? { cursoVinculado: { equals: query.curso } } : {}),
+              ...(query.perfil_id ? { perfilId: query.perfil_id } : {}),
+            },
+          }
         : {}),
     };
 
@@ -51,7 +87,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
       prisma.registroPonto.count({ where }),
       prisma.registroPonto.findMany({
         where,
-        include: { campus: true, professor: true },
+        include: { campus: true, professor: { include: { perfil: true } } },
         orderBy: { timestampServidor: 'desc' },
         skip: (query.pagina - 1) * query.por_pagina,
         take: query.por_pagina,
@@ -104,7 +140,9 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
       where: {
         ...(query.professor_id ? { id: query.professor_id } : {}),
         ...(query.curso ? { cursoVinculado: { equals: query.curso } } : {}),
+        ...(query.perfil_id ? { perfilId: query.perfil_id } : {}),
       },
+      include: { perfil: true },
       orderBy: { nome: 'asc' },
     });
 
@@ -155,6 +193,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
           nome: professor.nome,
           email: professor.email,
           curso_vinculado: professor.cursoVinculado,
+          perfil: professor.perfil?.nome ?? null,
         },
         dias,
         minutos_trabalhados_total: minutosTotal,
@@ -178,28 +217,184 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
     return reply.send(relatorio);
   });
 
-  /** Lista de professores, para popular os filtros do dashboard. */
+  /**
+   * Usuarios que batem ponto (professores, estagiarios, estudantes...), para
+   * popular os filtros e a tela de gestao do dashboard.
+   */
   app.get('/admin/professores', async (_request, reply) => {
     const professores = await prisma.professor.findMany({
       orderBy: { nome: 'asc' },
-      select: {
-        id: true,
-        nome: true,
-        email: true,
-        cursoVinculado: true,
-        ativo: true,
+      include: { perfil: true },
+    });
+
+    return reply.send({ dados: professores.map(professorParaRh) });
+  });
+
+  /**
+   * Cadastra um novo usuario com o perfil escolhido. Assim como no reset de
+   * senha, o RH nunca escolhe a senha: uma temporaria e gerada aqui e devolvida
+   * em texto puro UMA VEZ; o usuario e obrigado a trocar no primeiro login.
+   */
+  app.post('/admin/professores', async (request, reply) => {
+    const admin = usuarioAutenticado(request);
+    const dados = validar(professorCriarBodySchema, request.body);
+
+    const [emailEmUso, cpfEmUso] = await Promise.all([
+      prisma.professor.findUnique({ where: { email: dados.email } }),
+      prisma.professor.findUnique({ where: { cpf: dados.cpf } }),
+    ]);
+    if (emailEmUso) throw erroConflito('Ja existe um professor com este email.');
+    if (cpfEmUso) throw erroConflito('Ja existe um professor com este CPF.');
+    await exigirPerfilAtivo(dados.perfil_id);
+
+    const senhaTemporaria = gerarSenhaTemporaria();
+    const professor = await prisma.professor.create({
+      data: {
+        nome: dados.nome,
+        cpf: dados.cpf,
+        email: dados.email,
+        cursoVinculado: dados.curso_vinculado,
+        perfilId: dados.perfil_id,
+        senhaHash: await gerarHashSenha(senhaTemporaria),
+        deveTrocarSenha: true,
+      },
+      include: { perfil: true },
+    });
+
+    await registrarAuditoria(request, {
+      acao: 'CRIACAO_PROFESSOR',
+      resultado: 'SUCESSO',
+      adminId: admin.id,
+      professorId: professor.id,
+    });
+
+    return reply.status(201).send({
+      professor: professorParaRh(professor),
+      senha_temporaria: senhaTemporaria,
+    });
+  });
+
+  /** Edita o cadastro de um professor (nao mexe em senha). */
+  app.patch('/admin/professores/:id', async (request, reply) => {
+    const admin = usuarioAutenticado(request);
+    const { id } = validar(idParamSchema, request.params, 'parametros');
+    const dados = validar(professorEditarBodySchema, request.body);
+
+    const professor = await prisma.professor.findUnique({ where: { id } });
+    if (!professor) throw erroNaoEncontrado('Professor nao encontrado.');
+
+    if (dados.perfil_id && dados.perfil_id !== professor.perfilId) {
+      await exigirPerfilAtivo(dados.perfil_id);
+    }
+
+    if (dados.email && dados.email !== professor.email) {
+      const emailEmUso = await prisma.professor.findUnique({
+        where: { email: dados.email },
+      });
+      if (emailEmUso) throw erroConflito('Ja existe um professor com este email.');
+    }
+    if (dados.cpf && dados.cpf !== professor.cpf) {
+      const cpfEmUso = await prisma.professor.findUnique({
+        where: { cpf: dados.cpf },
+      });
+      if (cpfEmUso) throw erroConflito('Ja existe um professor com este CPF.');
+    }
+
+    const atualizado = await prisma.professor.update({
+      where: { id },
+      data: {
+        ...(dados.nome !== undefined ? { nome: dados.nome } : {}),
+        ...(dados.cpf !== undefined ? { cpf: dados.cpf } : {}),
+        ...(dados.email !== undefined ? { email: dados.email } : {}),
+        ...(dados.curso_vinculado !== undefined
+          ? { cursoVinculado: dados.curso_vinculado }
+          : {}),
+        ...(dados.perfil_id !== undefined ? { perfilId: dados.perfil_id } : {}),
+        ...(dados.ativo !== undefined ? { ativo: dados.ativo } : {}),
+      },
+      include: { perfil: true },
+    });
+
+    await registrarAuditoria(request, {
+      acao: 'EDICAO_PROFESSOR',
+      resultado: 'SUCESSO',
+      adminId: admin.id,
+      professorId: id,
+      detalhes: dados,
+    });
+
+    return reply.send({ professor: professorParaRh(atualizado) });
+  });
+
+  /**
+   * Apaga definitivamente um professor. Os registros de ponto dele saem
+   * junto (cascade no schema); a trilha de auditoria fica, com o nome/email
+   * capturados aqui, ja que o vinculo com o professor deixa de existir.
+   */
+  app.delete('/admin/professores/:id', async (request, reply) => {
+    const admin = usuarioAutenticado(request);
+    const { id } = validar(idParamSchema, request.params, 'parametros');
+
+    const professor = await prisma.professor.findUnique({ where: { id } });
+    if (!professor) throw erroNaoEncontrado('Professor nao encontrado.');
+
+    await prisma.professor.delete({ where: { id } });
+
+    await registrarAuditoria(request, {
+      acao: 'EXCLUSAO_PROFESSOR',
+      resultado: 'SUCESSO',
+      adminId: admin.id,
+      detalhes: {
+        professor_id: id,
+        nome: professor.nome,
+        email: professor.email,
       },
     });
 
-    return reply.send({
-      dados: professores.map((professor) => ({
-        id: professor.id,
-        nome: professor.nome,
-        email: professor.email,
-        curso_vinculado: professor.cursoVinculado,
-        ativo: professor.ativo,
-      })),
+    return reply.status(204).send();
+  });
+
+  /**
+   * Redefine a senha de um professor (esqueceu a senha, ou primeiro acesso).
+   * Gera uma senha temporaria legivel e devolve em texto puro UMA VEZ, nesta
+   * resposta — o RH repassa ao professor por fora do sistema (nada disso fica
+   * gravado, so o hash). O professor fica marcado com `deve_trocar_senha` e
+   * so escolhe a senha definitiva em PATCH /auth/senha, no proprio primeiro
+   * login. Sessoes anteriores sao revogadas: um reset costuma acontecer
+   * porque a conta pode ter sido comprometida, entao nao faz sentido deixar
+   * um refresh token antigo continuar valendo.
+   */
+  app.patch('/admin/professores/:id/redefinir-senha', async (request, reply) => {
+    const admin = usuarioAutenticado(request);
+    const { id } = validar(idParamSchema, request.params, 'parametros');
+
+    const professor = await prisma.professor.findUnique({ where: { id } });
+    if (!professor) throw erroNaoEncontrado('Professor nao encontrado.');
+
+    const senhaTemporaria = gerarSenhaTemporaria();
+
+    await prisma.$transaction([
+      prisma.professor.update({
+        where: { id },
+        data: {
+          senhaHash: await gerarHashSenha(senhaTemporaria),
+          deveTrocarSenha: true,
+        },
+      }),
+      prisma.refreshToken.updateMany({
+        where: { professorId: id, revogadoEm: null },
+        data: { revogadoEm: new Date() },
+      }),
+    ]);
+
+    await registrarAuditoria(request, {
+      acao: 'REDEFINICAO_SENHA',
+      resultado: 'SUCESSO',
+      adminId: admin.id,
+      professorId: id,
     });
+
+    return reply.send({ senha_temporaria: senhaTemporaria });
   });
 
   /** Cursos distintos com professor cadastrado. */
@@ -256,7 +451,7 @@ async function decidirRegistro(
       decididoPor: admin.id,
       decididoEm: new Date(),
     },
-    include: { campus: true, professor: true },
+    include: { campus: true, professor: { include: { perfil: true } } },
   });
 
   await registrarAuditoria(request, {

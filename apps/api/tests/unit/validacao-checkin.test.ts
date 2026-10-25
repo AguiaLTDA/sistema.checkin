@@ -26,10 +26,9 @@ const fora: AvaliacaoGeocerca = {
 };
 
 describe('decidirStatus', () => {
-  it('valida o registro dentro do raio com biometria confirmada', () => {
+  it('valida o registro feito dentro do raio do campus', () => {
     const decisao = decidirStatus({
       geocerca: dentro,
-      metodoBiometrico: 'FACE_ID',
       sincronizadoOffline: false,
     });
 
@@ -37,20 +36,30 @@ describe('decidirStatus', () => {
     expect(decisao.motivo).toBe('DENTRO_DO_RAIO');
   });
 
-  it('aceita digital como biometria valida', () => {
-    expect(
-      decidirStatus({
-        geocerca: dentro,
-        metodoBiometrico: 'DIGITAL',
-        sincronizadoOffline: false,
-      }).status,
-    ).toBe('VALIDADO');
+  it('so produz motivos derivados de localizacao ou de sincronizacao offline', () => {
+    const motivos = new Set(
+      [
+        { geocerca: dentro, sincronizadoOffline: false },
+        { geocerca: dentro, sincronizadoOffline: true },
+        { geocerca: fora, sincronizadoOffline: false },
+        { geocerca: fora, sincronizadoOffline: true },
+        { geocerca: null, sincronizadoOffline: false },
+        { geocerca: null, sincronizadoOffline: true },
+      ].map((entrada) => decidirStatus(entrada).motivo),
+    );
+
+    // Cobre todo o espaco de entradas: nenhum motivo de biometria sobrou.
+    expect([...motivos].sort()).toEqual([
+      'DENTRO_DO_RAIO',
+      'FORA_DO_RAIO',
+      'REGISTRO_OFFLINE',
+      'SEM_CAMPUS_CADASTRADO',
+    ]);
   });
 
   it('manda para aprovacao do RH quem esta fora do raio', () => {
     const decisao = decidirStatus({
       geocerca: fora,
-      metodoBiometrico: 'FACE_ID',
       sincronizadoOffline: false,
     });
 
@@ -61,7 +70,6 @@ describe('decidirStatus', () => {
   it('manda para aprovacao quando nao ha campus cadastrado', () => {
     const decisao = decidirStatus({
       geocerca: null,
-      metodoBiometrico: 'FACE_ID',
       sincronizadoOffline: false,
     });
 
@@ -69,21 +77,9 @@ describe('decidirStatus', () => {
     expect(decisao.motivo).toBe('SEM_CAMPUS_CADASTRADO');
   });
 
-  it('manda para aprovacao quando a biometria nao foi confirmada', () => {
-    const decisao = decidirStatus({
-      geocerca: dentro,
-      metodoBiometrico: 'NENHUM',
-      sincronizadoOffline: false,
-    });
-
-    expect(decisao.status).toBe('PENDENTE_APROVACAO');
-    expect(decisao.motivo).toBe('BIOMETRIA_NAO_CONFIRMADA');
-  });
-
   it('manda para aprovacao registros vindos da fila offline', () => {
     const decisao = decidirStatus({
       geocerca: dentro,
-      metodoBiometrico: 'FACE_ID',
       sincronizadoOffline: true,
     });
 
@@ -91,10 +87,9 @@ describe('decidirStatus', () => {
     expect(decisao.motivo).toBe('REGISTRO_OFFLINE');
   });
 
-  it('prioriza a falha de localizacao sobre a de biometria', () => {
+  it('prioriza a falha de localizacao sobre a origem offline', () => {
     const decisao = decidirStatus({
       geocerca: fora,
-      metodoBiometrico: 'NENHUM',
       sincronizadoOffline: true,
     });
 
@@ -103,9 +98,10 @@ describe('decidirStatus', () => {
 
   it('nunca atribui REJEITADO automaticamente', () => {
     const combinacoes = [
-      { geocerca: null, metodoBiometrico: 'NENHUM' as const, sincronizadoOffline: true },
-      { geocerca: fora, metodoBiometrico: 'NENHUM' as const, sincronizadoOffline: true },
-      { geocerca: dentro, metodoBiometrico: 'NENHUM' as const, sincronizadoOffline: false },
+      { geocerca: null, sincronizadoOffline: true },
+      { geocerca: fora, sincronizadoOffline: true },
+      { geocerca: fora, sincronizadoOffline: false },
+      { geocerca: dentro, sincronizadoOffline: true },
     ];
 
     for (const combinacao of combinacoes) {

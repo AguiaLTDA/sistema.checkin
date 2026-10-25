@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import type { RespostaLogin } from '@univc/shared';
-import { loginBodySchema, refreshBodySchema } from '@univc/shared';
+import { alterarSenhaBodySchema, loginBodySchema, refreshBodySchema } from '@univc/shared';
 import { registrarAuditoria } from '../lib/auditoria.js';
 import { erroNaoAutenticado } from '../lib/erros.js';
 import { adminParaUsuario, professorParaUsuario } from '../lib/serializar.js';
-import { HASH_FICTICIO, conferirSenha } from '../lib/senha.js';
+import { HASH_FICTICIO, conferirSenha, gerarHashSenha } from '../lib/senha.js';
 import {
   gerarAccessToken,
   gerarRefreshToken,
@@ -29,7 +29,10 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
   app.post('/auth/login', async (request, reply) => {
     const { email, senha } = validar(loginBodySchema, request.body);
 
-    const professor = await prisma.professor.findUnique({ where: { email } });
+    const professor = await prisma.professor.findUnique({
+      where: { email },
+      include: { perfil: true },
+    });
     const senhaConfere = await conferirSenha(
       senha,
       professor?.senhaHash ?? HASH_FICTICIO,
@@ -136,6 +139,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
     if (payload.papel === 'PROFESSOR') {
       const professor = await prisma.professor.findUnique({
         where: { id: payload.sub },
+        include: { perfil: true },
       });
       if (!professor || !professor.ativo) {
         throw erroNaoAutenticado('Professor inativo ou inexistente.');
@@ -194,6 +198,54 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
     return reply.status(204).send();
   });
 
+  /**
+   * Professor troca a propria senha. Serve tanto a troca obrigatoria depois
+   * de um reset do RH (`deve_trocar_senha`) quanto uma troca voluntaria —
+   * exigir `senha_atual` nos dois casos confirma que quem esta trocando e o
+   * dono da conta, mesmo com o access token em maos.
+   */
+  app.patch(
+    '/auth/senha',
+    { preHandler: exigirProfessor },
+    async (request, reply) => {
+      const usuario = usuarioAutenticado(request);
+      const { senha_atual: senhaAtual, senha_nova: senhaNova } = validar(
+        alterarSenhaBodySchema,
+        request.body,
+      );
+
+      const professor = await prisma.professor.findUniqueOrThrow({
+        where: { id: usuario.id },
+      });
+
+      if (!(await conferirSenha(senhaAtual, professor.senhaHash))) {
+        await registrarAuditoria(request, {
+          acao: 'ALTERACAO_SENHA',
+          resultado: 'REJEITADO',
+          professorId: professor.id,
+        });
+        throw erroNaoAutenticado('Senha atual incorreta.');
+      }
+
+      const atualizado = await prisma.professor.update({
+        where: { id: professor.id },
+        data: {
+          senhaHash: await gerarHashSenha(senhaNova),
+          deveTrocarSenha: false,
+        },
+        include: { perfil: true },
+      });
+
+      await registrarAuditoria(request, {
+        acao: 'ALTERACAO_SENHA',
+        resultado: 'SUCESSO',
+        professorId: professor.id,
+      });
+
+      return reply.send({ usuario: professorParaUsuario(atualizado) });
+    },
+  );
+
   app.get(
     '/auth/me',
     { preHandler: exigirProfessor },
@@ -201,6 +253,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
       const usuario = usuarioAutenticado(request);
       const professor = await prisma.professor.findUniqueOrThrow({
         where: { id: usuario.id },
+        include: { perfil: true },
       });
       return reply.send({ usuario: professorParaUsuario(professor) });
     },

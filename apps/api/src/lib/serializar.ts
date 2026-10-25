@@ -1,9 +1,15 @@
-import type { Campus, Professor, RegistroPonto } from '@prisma/client';
-import type { RegistroPontoDTO, UsuarioAutenticado } from '@univc/shared';
+import type { Campus, Perfil, Professor, RegistroPonto } from '@prisma/client';
+import type {
+  PerfilDTO,
+  RegistroPontoDTO,
+  UsuarioAutenticado,
+} from '@univc/shared';
+
+export type ProfessorComPerfil = Professor & { perfil?: Perfil | null };
 
 type RegistroCompleto = RegistroPonto & {
   campus?: Campus | null;
-  professor?: Professor | null;
+  professor?: ProfessorComPerfil | null;
 };
 
 /** Converte o registro do Prisma (camelCase) no DTO da API (snake_case). */
@@ -18,7 +24,6 @@ export function registroParaDTO(registro: RegistroCompleto): RegistroPontoDTO {
     latitude: registro.latitude,
     longitude: registro.longitude,
     distancia_do_campus_metros: Math.round(registro.distanciaDoCampusMetros),
-    metodo_biometrico: registro.metodoBiometrico,
     status: registro.status,
     sincronizado_offline: registro.sincronizadoOffline,
     justificativa_manual: registro.justificativaManual,
@@ -38,19 +43,36 @@ export function registroParaDTO(registro: RegistroCompleto): RegistroPontoDTO {
           nome: registro.professor.nome,
           email: registro.professor.email,
           curso_vinculado: registro.professor.cursoVinculado,
+          perfil: registro.professor.perfil?.nome ?? null,
         }
       : undefined,
     criado_em: registro.createdAt.toISOString(),
   };
 }
 
-export function professorParaUsuario(professor: Professor): UsuarioAutenticado {
+export function professorParaUsuario(
+  professor: ProfessorComPerfil,
+): UsuarioAutenticado {
   return {
     id: professor.id,
     nome: professor.nome,
     email: professor.email,
     papel: 'PROFESSOR',
     curso_vinculado: professor.cursoVinculado,
+    perfil: professor.perfil?.nome ?? null,
+    deve_trocar_senha: professor.deveTrocarSenha,
+  };
+}
+
+export function perfilParaDTO(
+  perfil: Perfil & { _count?: { usuarios: number } },
+): PerfilDTO {
+  return {
+    id: perfil.id,
+    nome: perfil.nome,
+    descricao: perfil.descricao,
+    ativo: perfil.ativo,
+    total_usuarios: perfil._count?.usuarios ?? 0,
   };
 }
 

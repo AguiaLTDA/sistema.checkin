@@ -1,0 +1,9 @@
+# Serve o build estatico do app do professor dentro do container. Sem TLS
+# aqui: o Caddy publico do host (fora deste projeto) e quem termina HTTPS e
+# faz reverse proxy ate este container pela rede Docker compartilhada.
+:80 {
+	encode zstd gzip
+	root * /srv
+	try_files {path} /index.html
+	file_server
+}

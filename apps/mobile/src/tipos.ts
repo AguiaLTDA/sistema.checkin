@@ -8,7 +8,6 @@
 
 export type TipoRegistro = 'CHEGADA' | 'SAIDA';
 export type StatusRegistro = 'VALIDADO' | 'PENDENTE_APROVACAO' | 'REJEITADO';
-export type MetodoBiometrico = 'FACE_ID' | 'DIGITAL' | 'NENHUM';
 
 export interface UsuarioAutenticado {
   id: string;
@@ -16,6 +15,8 @@ export interface UsuarioAutenticado {
   email: string;
   papel: 'PROFESSOR' | 'ADMIN';
   curso_vinculado?: string;
+  /** true logo depois que o RH redefine a senha; forca a troca antes de usar o app. */
+  deve_trocar_senha?: boolean;
 }
 
 export interface RespostaLogin {
@@ -33,7 +34,6 @@ export interface RegistroPontoDTO {
   latitude: number;
   longitude: number;
   distancia_do_campus_metros: number;
-  metodo_biometrico: MetodoBiometrico;
   status: StatusRegistro;
   sincronizado_offline: boolean;
   justificativa_manual: string | null;
@@ -70,7 +70,6 @@ export interface RegistroPendente {
   latitude: number;
   longitude: number;
   precisao_metros?: number;
-  metodo_biometrico: MetodoBiometrico;
   /** Horario declarado pelo aparelho; o servidor mantem o proprio timestamp. */
   registrado_offline_em: string;
   tentativas: number;

@@ -8,6 +8,7 @@ import { ErroHttp } from './lib/erros.js';
 import { rotasAdmin } from './routes/admin.js';
 import { rotasAuth } from './routes/auth.js';
 import { rotasCheckin } from './routes/checkin.js';
+import { rotasPerfis } from './routes/perfis.js';
 
 export async function construirApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -98,6 +99,7 @@ export async function construirApp(): Promise<FastifyInstance> {
   await app.register(rotasAuth);
   await app.register(rotasCheckin);
   await app.register(rotasAdmin);
+  await app.register(rotasPerfis);
 
   return app;
 }

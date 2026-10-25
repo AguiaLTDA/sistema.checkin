@@ -36,51 +36,89 @@ const SENHA_PROFESSOR = 'senha123';
 const SENHA_ADMIN = 'admin123';
 
 /**
- * Coordenadas aproximadas do campus da UNIVC em Sao Mateus/ES. Ajuste em
- * `campi` (ou pelo Prisma Studio) para a posicao exata antes de usar em campo.
+ * Endereco oficial: R. Humberto de Almeida Francklin, 217, Universitario,
+ * Sao Mateus - ES, 29933-415. Coordenada tomada do Plus Code (Open Location
+ * Code) informado pela gestao, "75G3+VW Universitario, Sao Mateus - ES",
+ * decodificado com a biblioteca oficial `open-location-code`. Confirmada por
+ * uma segunda referencia independente (18°43'22.36"S 39°50'42.02"W, tambem
+ * fornecida pela gestao): as duas batem entre si com 20 m de diferenca.
  */
 const CAMPUS_UNIVC = {
   nome: 'Campus Sao Mateus - UNIVC',
-  latitudeCentral: -18.70046,
-  longitudeCentral: -39.86322,
+  latitudeCentral: -18.7228125,
+  longitudeCentral: -39.8451875,
   raioPermitidoMetros: 300,
 };
 
-const PROFESSORES = [
+/** Mesmos nomes criados pela migration dos perfis. */
+const PERFIS = [
+  { nome: 'Professor', descricao: 'Docente vinculado a um curso' },
+  { nome: 'Estagiário', descricao: 'Estagiário em atividade na instituição' },
+  { nome: 'Estudante', descricao: 'Aluno com registro de presença' },
+] as const;
+
+type NomePerfil = (typeof PERFIS)[number]['nome'];
+
+const PROFESSORES: ReadonlyArray<{
+  nome: string;
+  cpf: string;
+  email: string;
+  cursoVinculado: string;
+  perfil: NomePerfil;
+}> = [
   {
     nome: 'Ana Beatriz Rocha',
     cpf: '11122233344',
     email: 'ana.rocha@univc.br',
     cursoVinculado: 'Direito',
+    perfil: 'Professor',
   },
   {
     nome: 'Carlos Eduardo Menezes',
     cpf: '22233344455',
     email: 'carlos.menezes@univc.br',
+    perfil: 'Professor',
     cursoVinculado: 'Odontologia',
   },
   {
     nome: 'Mariana Alves Prado',
     cpf: '33344455566',
     email: 'mariana.prado@univc.br',
+    perfil: 'Professor',
     cursoVinculado: 'Enfermagem',
   },
   {
     nome: 'Rafael Nunes Portela',
     cpf: '44455566677',
     email: 'rafael.portela@univc.br',
+    perfil: 'Professor',
     cursoVinculado: 'Medicina Veterinaria',
   },
   {
     nome: 'Juliana Castro Lima',
     cpf: '55566677788',
     email: 'juliana.lima@univc.br',
+    perfil: 'Professor',
     cursoVinculado: 'Administracao',
   },
-] as const;
+  {
+    nome: 'Lucas Ferreira Dias',
+    cpf: '66677788899',
+    email: 'lucas.dias@univc.br',
+    perfil: 'Estagiário',
+    cursoVinculado: 'Análise e Desenvolvimento de Sistemas',
+  },
+  {
+    nome: 'Beatriz Souza Ramos',
+    cpf: '77788899900',
+    email: 'beatriz.ramos@univc.br',
+    perfil: 'Estudante',
+    cursoVinculado: 'Psicologia',
+  },
+];
 
 const ADMIN = {
-  nome: 'Rejane Ferreira (RH)',
+  nome: 'RH UNIVC',
   email: 'rh@univc.br',
 };
 
@@ -103,15 +141,27 @@ async function main(): Promise<void> {
     create: { ...ADMIN, senhaHash: senhaHashAdmin },
   });
 
-  console.log('> seed: professores');
+  console.log('> seed: perfis');
+  const idsPerfil = new Map<NomePerfil, string>();
+  for (const perfil of PERFIS) {
+    const salvo = await prisma.perfil.upsert({
+      where: { nome: perfil.nome },
+      update: {},
+      create: perfil,
+    });
+    idsPerfil.set(perfil.nome, salvo.id);
+  }
+
+  console.log('> seed: usuarios (professores, estagiario e estudante)');
   const senhaHashProfessor = await gerarHashSenha(SENHA_PROFESSOR);
   const professores = [];
-  for (const dados of PROFESSORES) {
+  for (const { perfil, ...dados } of PROFESSORES) {
+    const perfilId = idsPerfil.get(perfil) ?? null;
     professores.push(
       await prisma.professor.upsert({
         where: { email: dados.email },
-        update: { ...dados, senhaHash: senhaHashProfessor, ativo: true },
-        create: { ...dados, senhaHash: senhaHashProfessor },
+        update: { ...dados, perfilId, senhaHash: senhaHashProfessor, ativo: true },
+        create: { ...dados, perfilId, senhaHash: senhaHashProfessor },
       }),
     );
   }
@@ -146,7 +196,6 @@ async function main(): Promise<void> {
     latitude: number;
     longitude: number;
     status: 'VALIDADO' | 'PENDENTE_APROVACAO';
-    metodo: 'FACE_ID' | 'DIGITAL';
     campusId: string | null;
   };
 
@@ -165,7 +214,6 @@ async function main(): Promise<void> {
     latitude: dentroDoCampus.latitude,
     longitude: dentroDoCampus.longitude,
     status: 'VALIDADO',
-    metodo: 'FACE_ID',
     campusId: campus.id,
   });
 
@@ -178,13 +226,12 @@ async function main(): Promise<void> {
 
     // Professor de Odontologia: um dia completo e um registro fora do raio,
     // que o dashboard mostra como pendente de aprovacao do RH.
-    { ...base(odontologia.id, 3, 'CHEGADA', 13, 30), metodo: 'DIGITAL' },
-    { ...base(odontologia.id, 3, 'SAIDA', 17, 45), metodo: 'DIGITAL' },
+    base(odontologia.id, 3, 'CHEGADA', 13, 30),
+    base(odontologia.id, 3, 'SAIDA', 17, 45),
     {
       ...base(odontologia.id, 1, 'CHEGADA', 13, 40),
       ...PONTO_FORA_DO_RAIO,
       status: 'PENDENTE_APROVACAO',
-      metodo: 'DIGITAL',
     },
 
     // Professora de Enfermagem: chegada sem saida, para exercitar o alerta de
@@ -214,7 +261,6 @@ async function main(): Promise<void> {
         latitude: registro.latitude,
         longitude: registro.longitude,
         distanciaDoCampusMetros: distancia,
-        metodoBiometrico: registro.metodo,
         status: registro.status,
         campusId: registro.campusId,
         sincronizadoOffline: false,
@@ -247,7 +293,7 @@ async function resumo(): Promise<void> {
   console.log(`Dashboard (RH):  ${ADMIN.email} / ${SENHA_ADMIN}`);
   for (const professor of PROFESSORES) {
     console.log(
-      `App (professor): ${professor.email.padEnd(28)} / ${SENHA_PROFESSOR}  [${professor.cursoVinculado}]`,
+      `Usuario (${professor.perfil.padEnd(10)}): ${professor.email.padEnd(28)} / ${SENHA_PROFESSOR}  [${professor.cursoVinculado}]`,
     );
   }
   console.log(

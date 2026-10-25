@@ -1,5 +1,5 @@
 import type { RegistroPontoDTO } from '@univc/shared';
-import { ROTULOS_METODO_BIOMETRICO, ROTULOS_TIPO } from '@univc/shared';
+import { ROTULOS_TIPO } from '@univc/shared';
 import type { ReactNode } from 'react';
 import { formatarDataHora, formatarDistancia } from '../lib/formato';
 import { EtiquetaStatus, Vazio } from './ui';
@@ -19,12 +19,11 @@ export function TabelaRegistros({ registros, acoes }: Props) {
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-            <th className="px-3 py-2 font-semibold">Professor</th>
-            <th className="px-3 py-2 font-semibold">Curso</th>
+            <th className="px-3 py-2 font-semibold">Usuario</th>
+            <th className="px-3 py-2 font-semibold">Perfil / curso</th>
             <th className="px-3 py-2 font-semibold">Tipo</th>
             <th className="px-3 py-2 font-semibold">Horario (servidor)</th>
             <th className="px-3 py-2 font-semibold">Distancia</th>
-            <th className="px-3 py-2 font-semibold">Biometria</th>
             <th className="px-3 py-2 font-semibold">Status</th>
             {acoes && <th className="px-3 py-2 font-semibold">Acoes</th>}
           </tr>
@@ -41,7 +40,12 @@ export function TabelaRegistros({ registros, acoes }: Props) {
                 </p>
               </td>
               <td className="px-3 py-3 text-slate-600">
-                {registro.professor?.curso_vinculado ?? '—'}
+                <p className="font-medium text-slate-700">
+                  {registro.professor?.perfil ?? '—'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {registro.professor?.curso_vinculado ?? '—'}
+                </p>
               </td>
               <td className="px-3 py-3">
                 <span
@@ -76,9 +80,6 @@ export function TabelaRegistros({ registros, acoes }: Props) {
                 <p className="text-xs text-slate-400">
                   {registro.campus?.nome ?? 'sem campus'}
                 </p>
-              </td>
-              <td className="px-3 py-3 text-slate-600">
-                {ROTULOS_METODO_BIOMETRICO[registro.metodo_biometrico]}
               </td>
               <td className="px-3 py-3">
                 <EtiquetaStatus status={registro.status} />

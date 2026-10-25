@@ -1,0 +1,63 @@
+# Blocos de site do CHECK-IN. Vivem em conf.d/ do Caddy publico compartilhado
+# (agente-univc) e sao puxados por import automatico -- nunca escrevem no
+# Caddyfile principal daquele projeto (mesma convencao do portal.caddy, que
+# ja vive ao lado deste arquivo em producao).
+#
+# Instalar na VPS (fora deste repo):
+#   cp deploy/vps/checkin.caddy /opt/agente-univc/publicador/conf.d/checkin.caddy
+#   docker exec univc-publicador caddy reload --config /etc/caddy/Caddyfile
+
+checkin.206-109-58-112.sslip.io {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://api.206-109-58-112.sslip.io; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+		-Server
+	}
+
+	reverse_proxy checkin-web:80 {
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+professor.206-109-58-112.sslip.io {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		# geolocation=(self) e o oposto do bloco do dashboard: este app so
+		# funciona pedindo a localizacao do proprio professor.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(self), payment=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://api.206-109-58-112.sslip.io; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+		-Server
+	}
+
+	reverse_proxy checkin-professor-web:80 {
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+api.206-109-58-112.sslip.io {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# CORS e autenticacao ficam por conta da propria API (@fastify/cors);
+	# aqui e so o encaminhamento.
+	reverse_proxy checkin-api:3333 {
+		header_up X-Real-IP {remote_host}
+	}
+}

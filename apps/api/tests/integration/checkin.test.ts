@@ -129,7 +129,6 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     const resposta = await checkin(token, {
       tipo: 'CHEGADA',
       ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
     });
 
     expect(resposta.statusCode).toBe(201);
@@ -138,7 +137,8 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     expect(corpo.registro.status).toBe('VALIDADO');
     expect(corpo.registro.tipo).toBe('CHEGADA');
     expect(corpo.registro.dentro_do_raio).toBe(true);
-    expect(corpo.registro.metodo_biometrico).toBe('FACE_ID');
+    // O DTO nao carrega nenhum campo de biometria: a presenca e so localizacao.
+    expect(corpo.registro).not.toHaveProperty('metodo_biometrico');
     expect(corpo.registro.campus.id).toBe(campusId);
     expect(corpo.registro.distancia_do_campus_metros).toBeLessThan(300);
     expect(corpo.motivo).toBe('DENTRO_DO_RAIO');
@@ -163,7 +163,6 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     const resposta = await checkin(token, {
       tipo: 'CHEGADA',
       ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'DIGITAL',
       timestamp: horarioForjado,
       timestamp_servidor: horarioForjado,
       created_at: horarioForjado,
@@ -178,13 +177,41 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     expect(timestamp).toBeGreaterThan(Date.now() - 60_000);
   });
 
+  it('ignora campo de biometria enviado por um cliente antigo', async () => {
+    const token = await autenticarProfessor();
+
+    const resposta = await checkin(token, {
+      tipo: 'CHEGADA',
+      ...DENTRO_DO_RAIO,
+      metodo_biometrico: 'FACE_ID',
+    });
+
+    // Um app desatualizado continua funcionando: a chave desconhecida e
+    // descartada pelo zod e o registro e validado so pela localizacao.
+    expect(resposta.statusCode).toBe(201);
+    expect(resposta.json().registro.status).toBe('VALIDADO');
+    expect(resposta.json().motivo).toBe('DENTRO_DO_RAIO');
+    expect(resposta.json().registro).not.toHaveProperty('metodo_biometrico');
+  });
+
+  it('recusa check-in sem latitude e longitude', async () => {
+    const token = await autenticarProfessor();
+
+    const resposta = await checkin(token, { tipo: 'CHEGADA' });
+
+    expect(resposta.statusCode).toBe(400);
+    expect(resposta.json().detalhes.map((d: { campo: string }) => d.campo)).toEqual(
+      expect.arrayContaining(['latitude', 'longitude']),
+    );
+    expect(await prisma.registroPonto.count()).toBe(0);
+  });
+
   it('manda para aprovacao do RH um registro fora do raio', async () => {
     const token = await autenticarProfessor();
 
     const resposta = await checkin(token, {
       tipo: 'CHEGADA',
       ...FORA_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
     });
 
     expect(resposta.statusCode).toBe(201);
@@ -195,19 +222,6 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     expect(corpo.motivo).toBe('FORA_DO_RAIO');
   });
 
-  it('marca como pendente o registro sem biometria confirmada', async () => {
-    const token = await autenticarProfessor();
-
-    const resposta = await checkin(token, {
-      tipo: 'CHEGADA',
-      ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'NENHUM',
-    });
-
-    expect(resposta.json().registro.status).toBe('PENDENTE_APROVACAO');
-    expect(resposta.json().motivo).toBe('BIOMETRIA_NAO_CONFIRMADA');
-  });
-
   it('aceita registro da fila offline guardando o horario declarado a parte', async () => {
     const token = await autenticarProfessor();
     const declarado = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
@@ -215,7 +229,6 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     const resposta = await checkin(token, {
       tipo: 'CHEGADA',
       ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
       sincronizado_offline: true,
       registrado_offline_em: declarado,
     });
@@ -236,14 +249,12 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     const primeira = await checkin(token, {
       tipo: 'CHEGADA',
       ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
     });
     expect(primeira.statusCode).toBe(201);
 
     const segunda = await checkin(token, {
       tipo: 'CHEGADA',
       ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
     });
 
     expect(segunda.statusCode).toBe(409);
@@ -258,12 +269,10 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     await checkin(token, {
       tipo: 'CHEGADA',
       ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
     });
     const saida = await checkin(token, {
       tipo: 'SAIDA',
       ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
     });
     expect(saida.statusCode).toBe(201);
 
@@ -294,12 +303,10 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     await checkin(token, {
       tipo: 'CHEGADA',
       ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
     });
     await checkin(token, {
       tipo: 'CHEGADA',
       ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
     });
 
     const logs = await prisma.logAuditoria.findMany({
@@ -322,7 +329,6 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
       payload: {
         tipo: 'CHEGADA',
         ...DENTRO_DO_RAIO,
-        metodo_biometrico: 'FACE_ID',
       },
     });
 
@@ -336,15 +342,13 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     const resposta = await checkin(token, {
       tipo: 'ALMOCO',
       latitude: 999,
-      longitude: -39.86322,
-      metodo_biometrico: 'IRIS',
     });
 
     expect(resposta.statusCode).toBe(400);
     const corpo = resposta.json();
     expect(corpo.erro).toBe('VALIDACAO');
     expect(corpo.detalhes.map((d: { campo: string }) => d.campo)).toEqual(
-      expect.arrayContaining(['tipo', 'latitude', 'metodo_biometrico']),
+      expect.arrayContaining(['tipo', 'latitude', 'longitude']),
     );
     expect(await prisma.registroPonto.count()).toBe(0);
   });
@@ -368,7 +372,6 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     const pendente = await checkin(tokenProfessor, {
       tipo: 'CHEGADA',
       ...FORA_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
     });
     const registroId = pendente.json().registro.id as string;
 
@@ -422,7 +425,6 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     await checkin(tokenProfessor, {
       tipo: 'CHEGADA',
       ...DENTRO_DO_RAIO,
-      metodo_biometrico: 'FACE_ID',
     });
 
     const tokenAdmin = await autenticarAdmin();

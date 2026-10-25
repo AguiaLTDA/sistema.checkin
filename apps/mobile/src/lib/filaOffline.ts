@@ -88,7 +88,6 @@ export async function sincronizarFila(): Promise<ResultadoSincronizacao> {
         latitude: item.latitude,
         longitude: item.longitude,
         precisao_metros: item.precisao_metros,
-        metodo_biometrico: item.metodo_biometrico,
         sincronizado_offline: true,
         registrado_offline_em: item.registrado_offline_em,
       });

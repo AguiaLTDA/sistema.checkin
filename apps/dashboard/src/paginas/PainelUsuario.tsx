@@ -88,8 +88,6 @@ export function PainelUsuario() {
         latitude: posicao.coords.latitude,
         longitude: posicao.coords.longitude,
         precisao_metros: posicao.coords.accuracy,
-        // O navegador nao confirma biometria: o registro segue para o RH.
-        metodo_biometrico: 'NENHUM',
       });
       setResultado(resposta);
       setPagina(1);
@@ -175,10 +173,9 @@ export function PainelUsuario() {
               ))}
             </div>
             <p className="max-w-lg text-xs text-slate-500">
-              O horario e sempre o do servidor e a localizacao e conferida com o
-              raio do campus. Pelo navegador nao ha confirmacao biometrica, entao
-              os registros feitos aqui vao para aprovacao do RH; pelo app no
-              celular, com Face ID ou digital, eles sao validados na hora.
+              O horario e sempre o do servidor e a presenca e comprovada apenas
+              pela sua localizacao: dentro do raio do campus o registro e
+              validado na hora; fora dele, segue para aprovacao do RH.
             </p>
           </div>
 
@@ -297,7 +294,7 @@ export function PainelUsuario() {
       </main>
 
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
-        Nenhum dado biometrico e coletado ou armazenado.
+        A presenca e comprovada apenas pela localizacao. Nenhum dado biometrico e coletado ou armazenado.
       </footer>
     </div>
   );

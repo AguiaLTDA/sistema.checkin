@@ -7,8 +7,9 @@ import { Login } from './paginas/Login';
 import { PainelUsuario } from './paginas/PainelUsuario';
 import { Pendentes } from './paginas/Pendentes';
 import { Perfis } from './paginas/Perfis';
+import { Professores } from './paginas/Professores';
 import { Registros } from './paginas/Registros';
-import { Usuarios } from './paginas/Usuarios';
+import { TrocarSenha } from './paginas/TrocarSenha';
 
 /**
  * `/` e a pagina inicial com os dois acessos. `/rh/*` e o painel do RH e
@@ -25,6 +26,7 @@ export function App() {
       <Route path="/registros" element={<Navigate to="/rh/registros" replace />} />
       <Route path="/pendentes" element={<Navigate to="/rh/pendentes" replace />} />
       <Route path="/jornada" element={<Navigate to="/rh/jornada" replace />} />
+      <Route path="/professores" element={<Navigate to="/rh/usuarios" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -40,8 +42,9 @@ function AreaRh() {
         <Route path="registros" element={<Registros />} />
         <Route path="pendentes" element={<Pendentes />} />
         <Route path="jornada" element={<Jornada />} />
-        <Route path="usuarios" element={<Usuarios />} />
+        <Route path="usuarios" element={<Professores />} />
         <Route path="perfis" element={<Perfis />} />
+        <Route path="professores" element={<Navigate to="/rh/usuarios" replace />} />
         <Route path="*" element={<Navigate to="/rh/registros" replace />} />
       </Route>
     </Routes>
@@ -51,5 +54,6 @@ function AreaRh() {
 function AreaUsuario() {
   const { usuario } = useAuth('usuario');
   if (!usuario) return <Login escopo="usuario" />;
+  if (usuario.deve_trocar_senha) return <TrocarSenha />;
   return <PainelUsuario />;
 }

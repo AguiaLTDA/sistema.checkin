@@ -60,14 +60,11 @@ export function Login({ escopo }: { escopo: Escopo }) {
   return (
     <div className="flex min-h-full items-center justify-center bg-univc-900 px-4 py-12">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-        <Link
-          to="/"
-          className="text-xs font-medium text-univc-700 hover:text-univc-900"
-        >
-          ← Inicio
+        <Link to="/" className="inline-block">
+          <img src="/logo-univc.png" alt="UNIVC" className="h-12" />
         </Link>
         <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-univc-500">
-          UNIVC Check-in
+          Check-in
         </p>
         <h1 className="text-xl font-semibold text-slate-900">{textos.titulo}</h1>
         <p className="mt-1 text-sm text-slate-500">{textos.descricao}</p>

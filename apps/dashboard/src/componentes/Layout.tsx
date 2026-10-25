@@ -17,11 +17,14 @@ export function Layout() {
     <div className="flex min-h-full flex-col">
       <header className="bg-univc-900 text-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-          <Link to="/" className="block">
-            <p className="text-lg font-semibold">UNIVC Check-in · Painel do RH</p>
-            <p className="text-xs text-univc-100">
-              Controle de presenca — RH e coordenacao
-            </p>
+          <Link to="/" className="flex items-center gap-3">
+            <img src="/logo-univc-branco.png" alt="UNIVC" className="h-9" />
+            <div className="hidden border-l border-white/20 pl-3 sm:block">
+              <p className="text-sm font-semibold">Check-in · Painel do RH</p>
+              <p className="text-xs text-univc-100">
+                Controle de presenca — RH e coordenacao
+              </p>
+            </div>
           </Link>
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <Link
@@ -66,8 +69,8 @@ export function Layout() {
       </main>
 
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
-        Nenhum dado biometrico e coletado ou armazenado: a biometria e validada
-        no proprio aparelho do usuario.
+        A presenca e comprovada apenas pela localizacao do aparelho no momento
+        do registro. Nenhum dado biometrico e coletado ou armazenado.
       </footer>
     </div>
   );

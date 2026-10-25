@@ -60,11 +60,10 @@ export function FiltrosRegistros({ valores, aoMudar, camposOcultos = [] }: Props
   const atualizar = (campo: keyof ValoresFiltro, valor: string) =>
     aoMudar({ ...valores, [campo]: valor });
 
-  const perfilSelecionado = perfis.find((perfil) => perfil.id === valores.perfil_id);
   const professoresFiltrados = professores.filter(
     (professor) =>
       (!valores.curso || professor.curso_vinculado === valores.curso) &&
-      (!perfilSelecionado || professor.perfil === perfilSelecionado.nome),
+      (!valores.perfil_id || professor.perfil?.id === valores.perfil_id),
   );
 
   return (

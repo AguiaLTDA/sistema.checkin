@@ -21,7 +21,7 @@ const AREAS: Area[] = [
       'Registros de ponto de todos os usuarios, com filtros',
       'Aprovacao ou rejeicao de registros pendentes, com justificativa',
       'Relatorio de jornada com horas trabalhadas e exportacao CSV',
-      'Cadastro de usuarios: criar, editar, desativar e redefinir senha',
+      'Cadastro de usuarios: criar, editar, desativar, apagar e redefinir senha',
       'Perfis: Professor, Estagiario, Estudante e outros que o RH criar',
     ],
   },
@@ -32,7 +32,8 @@ const AREAS: Area[] = [
     botao: 'Entrar no Painel do Usuario',
     destaque: false,
     funcionalidades: [
-      'Marcar chegada e saida com a localizacao do navegador',
+      'Marcar chegada e saida; a presenca e validada pela localizacao',
+      'Senha temporaria dada pelo RH, trocada no primeiro acesso',
       'Ver o ultimo registro e qual o proximo esperado',
       'Status de cada registro: validado, pendente ou rejeitado',
       'Historico de registros com distancia ate o campus',

@@ -10,15 +10,15 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Manifests dos apps primeiro (cache de camada quando so eles mudam). O
-# @univc/shared entra com o codigo-fonte completo aqui: seu script `prepare`
-# roda `tsc` durante o `npm ci` mesmo com --ignore-scripts (o flag nao suprime
-# o prepare de dependencias de workspace/local), entao o tsconfig.json precisa
-# existir nesse ponto ou o build da imagem quebra.
+# Manifests primeiro: enquanto as dependencias nao mudam, esta camada e cacheada.
 COPY package.json package-lock.json ./
-COPY packages/shared packages/shared
 COPY apps/api/package.json apps/api/
 COPY apps/dashboard/package.json apps/dashboard/
+# Codigo-fonte do shared copiado ANTES do `npm ci`, e nao so o package.json:
+# `--ignore-scripts` nao impede de forma confiavel o `prepare` (que builda o
+# shared) de rodar durante o install dos workspaces, e sem o tsconfig.json
+# presente nesse momento o build falharia com TS5058.
+COPY packages/shared packages/shared
 
 RUN npm ci --ignore-scripts
 

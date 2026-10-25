@@ -1,5 +1,4 @@
 import type {
-  MetodoBiometrico,
   RegistroPontoDTO,
   RespostaPaginada,
   TipoRegistro,
@@ -37,7 +36,6 @@ export function registrarPonto(corpo: {
   tipo: TipoRegistro;
   latitude: number;
   longitude: number;
-  metodo_biometrico: MetodoBiometrico;
   precisao_metros?: number;
 }): Promise<RespostaCheckin> {
   return requisitar('/checkin', { metodo: 'POST', corpo, escopo: 'usuario' });

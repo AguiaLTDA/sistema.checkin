@@ -40,6 +40,10 @@ function criarSessao(prefixo: string) {
       localStorage.setItem(chaveRefresh, resposta.refresh_token);
       localStorage.setItem(chaveUsuario, JSON.stringify(resposta.usuario));
     },
+    /** Atualiza so os dados do usuario (ex.: depois de trocar a senha), sem mexer nos tokens. */
+    atualizarUsuario(usuario: RespostaLogin['usuario']) {
+      localStorage.setItem(chaveUsuario, JSON.stringify(usuario));
+    },
     limpar() {
       localStorage.removeItem(chaveAccess);
       localStorage.removeItem(chaveRefresh);
@@ -146,6 +150,23 @@ export async function entrar(
   );
   sessoes[escopo].salvar(resposta);
   return resposta;
+}
+
+/** Troca a senha do usuario logado (obrigatoria depois de uma redefinicao do RH). */
+export async function alterarSenha(
+  senhaAtual: string,
+  senhaNova: string,
+): Promise<RespostaLogin['usuario']> {
+  const resposta = await requisitar<{ usuario: RespostaLogin['usuario'] }>(
+    '/auth/senha',
+    {
+      metodo: 'PATCH',
+      corpo: { senha_atual: senhaAtual, senha_nova: senhaNova },
+      escopo: 'usuario',
+    },
+  );
+  sessoes.usuario.atualizarUsuario(resposta.usuario);
+  return resposta.usuario;
 }
 
 export async function sairDaSessao(escopo: Escopo): Promise<void> {

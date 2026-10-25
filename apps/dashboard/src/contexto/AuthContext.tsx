@@ -18,6 +18,8 @@ interface SessaoEscopo {
   usuario: UsuarioAutenticado | null;
   entrar: (email: string, senha: string) => Promise<void>;
   sair: () => Promise<void>;
+  /** Substitui os dados do usuario na tela (ex.: depois de trocar a senha). */
+  atualizarUsuario: (usuario: UsuarioAutenticado) => void;
 }
 
 type ContextoAuth = Record<Escopo, SessaoEscopo>;
@@ -46,20 +48,26 @@ export function ProvedorAuth({ children }: { children: ReactNode }) {
     setUsuarios((atual) => ({ ...atual, [escopo]: null }));
   }, []);
 
+  const atualizar = useCallback((escopo: Escopo, usuario: UsuarioAutenticado) => {
+    setUsuarios((atual) => ({ ...atual, [escopo]: usuario }));
+  }, []);
+
   const valor = useMemo<ContextoAuth>(
     () => ({
       rh: {
         usuario: usuarios.rh,
         entrar: (email, senha) => entrar('rh', email, senha),
         sair: () => sair('rh'),
+        atualizarUsuario: (usuario) => atualizar('rh', usuario),
       },
       usuario: {
         usuario: usuarios.usuario,
         entrar: (email, senha) => entrar('usuario', email, senha),
         sair: () => sair('usuario'),
+        atualizarUsuario: (usuario) => atualizar('usuario', usuario),
       },
     }),
-    [usuarios, entrar, sair],
+    [usuarios, entrar, sair, atualizar],
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

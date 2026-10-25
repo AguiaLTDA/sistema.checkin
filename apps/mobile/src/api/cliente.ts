@@ -56,6 +56,10 @@ export const armazenamentoSessao = {
     const bruto = await AsyncStorage.getItem(CHAVE_USUARIO);
     return bruto ? (JSON.parse(bruto) as UsuarioAutenticado) : null;
   },
+  /** Atualiza so os dados do usuario (ex.: depois de trocar a senha), sem mexer nos tokens. */
+  async salvarUsuario(usuario: UsuarioAutenticado): Promise<void> {
+    await AsyncStorage.setItem(CHAVE_USUARIO, JSON.stringify(usuario));
+  },
 };
 
 interface Opcoes {
@@ -153,6 +157,21 @@ export async function entrar(
   return resposta;
 }
 
+export async function alterarSenha(
+  senhaAtual: string,
+  senhaNova: string,
+): Promise<UsuarioAutenticado> {
+  const resposta = await requisitar<{ usuario: UsuarioAutenticado }>(
+    '/auth/senha',
+    {
+      metodo: 'PATCH',
+      corpo: { senha_atual: senhaAtual, senha_nova: senhaNova },
+    },
+  );
+  await armazenamentoSessao.salvarUsuario(resposta.usuario);
+  return resposta.usuario;
+}
+
 export async function sair(): Promise<void> {
   const refreshToken = await armazenamentoSessao.refreshToken();
   if (refreshToken) {
@@ -167,9 +186,9 @@ export async function sair(): Promise<void> {
 
 export interface CorpoCheckin {
   tipo: 'CHEGADA' | 'SAIDA';
+  /** Unica prova de presenca aceita pela API: nao ha campo de biometria. */
   latitude: number;
   longitude: number;
-  metodo_biometrico: 'FACE_ID' | 'DIGITAL' | 'NENHUM';
   precisao_metros?: number;
   sincronizado_offline?: boolean;
   registrado_offline_em?: string;

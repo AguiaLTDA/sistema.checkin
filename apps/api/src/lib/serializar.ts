@@ -3,10 +3,9 @@ import type {
   PerfilDTO,
   RegistroPontoDTO,
   UsuarioAutenticado,
-  UsuarioDTO,
 } from '@univc/shared';
 
-type ProfessorComPerfil = Professor & { perfil?: Perfil | null };
+export type ProfessorComPerfil = Professor & { perfil?: Perfil | null };
 
 type RegistroCompleto = RegistroPonto & {
   campus?: Campus | null;
@@ -25,7 +24,6 @@ export function registroParaDTO(registro: RegistroCompleto): RegistroPontoDTO {
     latitude: registro.latitude,
     longitude: registro.longitude,
     distancia_do_campus_metros: Math.round(registro.distanciaDoCampusMetros),
-    metodo_biometrico: registro.metodoBiometrico,
     status: registro.status,
     sincronizado_offline: registro.sincronizadoOffline,
     justificativa_manual: registro.justificativaManual,
@@ -62,22 +60,7 @@ export function professorParaUsuario(
     papel: 'PROFESSOR',
     curso_vinculado: professor.cursoVinculado,
     perfil: professor.perfil?.nome ?? null,
-  };
-}
-
-/** Cadastro do usuario como o RH ve. Nunca inclui o hash da senha. */
-export function professorParaUsuarioDTO(professor: ProfessorComPerfil): UsuarioDTO {
-  return {
-    id: professor.id,
-    nome: professor.nome,
-    cpf: professor.cpf,
-    email: professor.email,
-    curso_vinculado: professor.cursoVinculado,
-    perfil: professor.perfil
-      ? { id: professor.perfil.id, nome: professor.perfil.nome }
-      : null,
-    ativo: professor.ativo,
-    criado_em: professor.createdAt.toISOString(),
+    deve_trocar_senha: professor.deveTrocarSenha,
   };
 }
 

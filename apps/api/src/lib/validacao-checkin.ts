@@ -1,15 +1,15 @@
-import type { MetodoBiometrico, StatusRegistro } from '@univc/shared';
+import type { StatusRegistro } from '@univc/shared';
 import type { AvaliacaoGeocerca } from './geo.js';
 
 /**
  * Regra de decisao do status de um registro de ponto.
  *
- * A regra do MVP e: dentro do raio do campus -> VALIDADO; fora do raio ->
- * PENDENTE_APROVACAO. Alem dela, tratamos como pendentes tres situacoes em que
- * o servidor nao consegue confirmar a presenca por conta propria:
+ * O unico criterio de presenca e a localizacao: dentro do raio do campus ->
+ * VALIDADO; fora do raio -> PENDENTE_APROVACAO. Alem dela, tratamos como
+ * pendentes duas situacoes em que o servidor nao consegue confirmar a presenca
+ * por conta propria:
  *
  *  - nenhum campus cadastrado (nao ha geocerca contra a qual comparar);
- *  - biometria nao confirmada no aparelho (`metodo_biometrico: NENHUM`);
  *  - registro vindo da fila offline, porque o servidor nao tem como atestar o
  *    momento em que o professor realmente estava no campus.
  *
@@ -21,12 +21,10 @@ export type MotivoStatus =
   | 'DENTRO_DO_RAIO'
   | 'FORA_DO_RAIO'
   | 'SEM_CAMPUS_CADASTRADO'
-  | 'BIOMETRIA_NAO_CONFIRMADA'
   | 'REGISTRO_OFFLINE';
 
 export interface EntradaDecisao {
   geocerca: AvaliacaoGeocerca | null;
-  metodoBiometrico: MetodoBiometrico;
   sincronizadoOffline: boolean;
 }
 
@@ -42,8 +40,6 @@ const MENSAGENS: Record<MotivoStatus, string> = {
     'Voce esta fora do raio permitido do campus. O registro foi enviado para aprovacao do RH.',
   SEM_CAMPUS_CADASTRADO:
     'Nenhum campus cadastrado para validar a localizacao. O registro foi enviado para aprovacao do RH.',
-  BIOMETRIA_NAO_CONFIRMADA:
-    'A biometria nao foi confirmada no aparelho. O registro foi enviado para aprovacao do RH.',
   REGISTRO_OFFLINE:
     'Registro sincronizado apos uso offline. O horario declarado precisa de conferencia do RH.',
 };
@@ -61,7 +57,6 @@ export function decidirStatus(entrada: EntradaDecisao): DecisaoStatus {
 function determinarMotivo(entrada: EntradaDecisao): MotivoStatus {
   if (entrada.geocerca === null) return 'SEM_CAMPUS_CADASTRADO';
   if (!entrada.geocerca.dentroDoRaio) return 'FORA_DO_RAIO';
-  if (entrada.metodoBiometrico === 'NENHUM') return 'BIOMETRIA_NAO_CONFIRMADA';
   if (entrada.sincronizadoOffline) return 'REGISTRO_OFFLINE';
   return 'DENTRO_DO_RAIO';
 }

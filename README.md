@@ -360,10 +360,14 @@ Criados pelo seed (`apps/api/prisma/seed.ts`):
 
 | Nome                        | Latitude    | Longitude   | Raio  |
 | --------------------------- | ----------- | ----------- | ----- |
-| Campus São Mateus - UNIVC   | `-18.70046` | `-39.86322` | 300 m |
+| Campus São Mateus - UNIVC   | `-18.7228125` | `-39.8451875` | 300 m |
 
-> As coordenadas são **aproximadas**. Antes de usar em campo, ajuste no seed ou
-> direto na tabela `campi` (`npx prisma studio -w @univc/api`). O modelo aceita
+> A coordenada vem do Plus Code oficial do campus (`75G3+VW`, R. Humberto de
+> Almeida Francklin, 217, Universitário, São Mateus/ES), conferida com uma
+> segunda referência em graus/minutos/segundos (diferença de ~20 m). O seed só
+> grava esse valor quando roda; **em um banco que já existe (por exemplo o
+> Supabase de produção), o campus precisa ser corrigido direto na tabela
+> `campi`** (SQL Editor ou `npx prisma studio -w @univc/api`). O modelo aceita
 > vários campi, e a validação sempre usa o raio do campus mais próximo.
 
 O seed também cria registros históricos: dois dias completos de uma professora,
@@ -401,7 +405,7 @@ precisa estar na mesma rede Wi-Fi do computador.
 "dentro do raio" você vai querer simular a posição:
 
 - **Simulador iOS**: `Features → Location → Custom Location`, latitude
-  `-18.70046`, longitude `-39.86322`.
+  `-18.7228125`, longitude `-39.8451875`.
 - **Emulador Android**: menu `...` → `Location` → mesma coordenada → `Set
   Location`.
 - **Celular real**: use um app de mock location (Android, com opções de
@@ -506,8 +510,8 @@ Toda criação, edição e exclusão gera uma entrada em `logs_auditoria`
 // POST /checkin
 {
   "tipo": "CHEGADA",              // CHEGADA | SAIDA
-  "latitude": -18.70046,          // obrigatória
-  "longitude": -39.86322,         // obrigatória
+  "latitude": -18.7228125,        // obrigatória
+  "longitude": -39.8451875,       // obrigatória
   "precisao_metros": 12.4,        // opcional
   "sincronizado_offline": false,  // opcional
   "registrado_offline_em": "..."  // obrigatório se sincronizado_offline

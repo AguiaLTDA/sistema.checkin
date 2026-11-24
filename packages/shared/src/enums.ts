@@ -1,6 +1,6 @@
 /**
  * Enums do dominio, compartilhados entre API, dashboard e app mobile.
- * Os valores sao identicos aos enums do Prisma (apps/api/prisma/schema.prisma).
+ * Os valores sao identicos aos aceitos pela planilha (apps/api/src/dados/esquema.ts).
  */
 
 export const TIPOS_REGISTRO = ['CHEGADA', 'SAIDA'] as const;

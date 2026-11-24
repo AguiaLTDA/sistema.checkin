@@ -10,7 +10,7 @@ import { registroParaDTO } from '../lib/serializar.js';
 import { decidirStatus, sequenciaValida } from '../lib/validacao-checkin.js';
 import { validar } from '../lib/validacao.js';
 import { exigirProfessor, usuarioAutenticado } from '../plugins/autenticacao.js';
-import { prisma } from '../prisma.js';
+import { banco } from '../banco.js';
 
 export async function rotasCheckin(app: FastifyInstance): Promise<void> {
   /**
@@ -52,13 +52,13 @@ export async function rotasCheckin(app: FastifyInstance): Promise<void> {
         throw erro;
       }
 
-      const campi = await prisma.campus.findMany({ where: { ativo: true } });
+      const campi = await banco.campus.findMany({ where: { ativo: true } });
       const geocerca = avaliarGeocerca(
         { latitude: corpo.latitude, longitude: corpo.longitude },
         campi,
       );
 
-      const ultimo = await prisma.registroPonto.findFirst({
+      const ultimo = await banco.registroPonto.findFirst({
         where: { professorId: usuario.id, status: { not: 'REJEITADO' } },
         orderBy: { timestampServidor: 'desc' },
         select: { tipo: true, timestampServidor: true },
@@ -94,7 +94,7 @@ export async function rotasCheckin(app: FastifyInstance): Promise<void> {
         sincronizadoOffline: corpo.sincronizado_offline,
       });
 
-      const registro = await prisma.registroPonto.create({
+      const registro = await banco.registroPonto.create({
         data: {
           professorId: usuario.id,
           tipo: corpo.tipo,
@@ -160,8 +160,8 @@ export async function rotasCheckin(app: FastifyInstance): Promise<void> {
       };
 
       const [total, registros] = await Promise.all([
-        prisma.registroPonto.count({ where }),
-        prisma.registroPonto.findMany({
+        banco.registroPonto.count({ where }),
+        banco.registroPonto.findMany({
           where,
           include: { campus: true },
           orderBy: { timestampServidor: 'desc' },
@@ -194,7 +194,7 @@ export async function rotasCheckin(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const usuario = usuarioAutenticado(request);
 
-      const ultimo = await prisma.registroPonto.findFirst({
+      const ultimo = await banco.registroPonto.findFirst({
         where: { professorId: usuario.id, status: { not: 'REJEITADO' } },
         orderBy: { timestampServidor: 'desc' },
         include: { campus: true },

@@ -1,54 +1,38 @@
+# Ambiente local. A API guarda os dados num arquivo JSON dentro do volume
+# `dados` (nada de banco para subir). Para desenvolver contra uma planilha de
+# teste, defina ARMAZENAMENTO=planilha, APPS_SCRIPT_URL e APPS_SCRIPT_CHAVE no
+# .env — nunca a planilha de producao.
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: univc_checkin_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-univc}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-univc}
-      POSTGRES_DB: ${POSTGRES_DB:-univc_checkin}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      # Roda uma unica vez, na criacao do volume: cria o banco de testes.
-      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/10-bancos.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-univc} -d ${POSTGRES_DB:-univc_checkin}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     container_name: univc_checkin_api
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
       NODE_ENV: ${NODE_ENV:-development}
-      # Montada aqui, e nao lida do .env: dentro da rede do compose o host do
-      # banco e sempre `db`. A DATABASE_URL do .env serve para rodar a API e o
-      # Prisma fora do Docker, onde o host e localhost.
-      DATABASE_URL: postgresql://${POSTGRES_USER:-univc}:${POSTGRES_PASSWORD:-univc}@db:5432/${POSTGRES_DB:-univc_checkin}?schema=public
+      ARMAZENAMENTO: ${ARMAZENAMENTO:-arquivo}
+      ARQUIVO_DADOS: /dados/banco.json
+      APPS_SCRIPT_URL: ${APPS_SCRIPT_URL:-}
+      APPS_SCRIPT_CHAVE: ${APPS_SCRIPT_CHAVE:-}
+      PLANILHA_CACHE_SEGUNDOS: ${PLANILHA_CACHE_SEGUNDOS:-60}
       API_PORT: 3333
       API_HOST: 0.0.0.0
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-troque-este-segredo-de-acesso-em-producao-0123456789}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-troque-este-segredo-de-refresh-em-producao-0123456789}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8081,http://localhost:19006}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:8081,http://localhost:19006}
       CHECKIN_RATE_LIMIT_MAX: ${CHECKIN_RATE_LIMIT_MAX:-10}
       CHECKIN_RATE_LIMIT_WINDOW: ${CHECKIN_RATE_LIMIT_WINDOW:-1 minute}
       RELATORIO_TIMEZONE: ${RELATORIO_TIMEZONE:-America/Sao_Paulo}
-      # Roda `prisma migrate deploy` + seed no boot do container (ambiente local).
-      RUN_MIGRATIONS_ON_BOOT: "true"
+      # Usuarios e registros ficticios no primeiro boot (o seed nao grava na
+      # planilha e e idempotente).
       RUN_SEED_ON_BOOT: "true"
+    volumes:
+      - dados:/dados
     ports:
       - "${API_PORT:-3333}:3333"
 
 volumes:
-  postgres_data:
+  dados:

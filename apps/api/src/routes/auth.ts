@@ -18,7 +18,7 @@ import {
   exigirProfessor,
   usuarioAutenticado,
 } from '../plugins/autenticacao.js';
-import { prisma } from '../prisma.js';
+import { banco } from '../banco.js';
 
 export async function rotasAuth(app: FastifyInstance): Promise<void> {
   /**
@@ -29,7 +29,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
   app.post('/auth/login', async (request, reply) => {
     const { email, senha } = validar(loginBodySchema, request.body);
 
-    const professor = await prisma.professor.findUnique({
+    const professor = await banco.professor.findUnique({
       where: { email },
       include: { perfil: true },
     });
@@ -77,7 +77,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
   app.post('/auth/admin/login', async (request, reply) => {
     const { email, senha } = validar(loginBodySchema, request.body);
 
-    const admin = await prisma.admin.findUnique({ where: { email } });
+    const admin = await banco.admin.findUnique({ where: { email } });
     const senhaConfere = await conferirSenha(
       senha,
       admin?.senhaHash ?? HASH_FICTICIO,
@@ -123,7 +123,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
     );
     const payload = verificarRefreshToken(refreshToken);
 
-    const armazenado = await prisma.refreshToken.findUnique({
+    const armazenado = await banco.refreshToken.findUnique({
       where: { tokenHash: hashToken(refreshToken) },
     });
 
@@ -131,13 +131,13 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
       throw erroNaoAutenticado('Refresh token invalido ou ja utilizado.');
     }
 
-    await prisma.refreshToken.update({
+    await banco.refreshToken.update({
       where: { id: armazenado.id },
       data: { revogadoEm: new Date() },
     });
 
     if (payload.papel === 'PROFESSOR') {
-      const professor = await prisma.professor.findUnique({
+      const professor = await banco.professor.findUnique({
         where: { id: payload.sub },
         include: { perfil: true },
       });
@@ -159,7 +159,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
       return reply.send(resposta);
     }
 
-    const admin = await prisma.admin.findUnique({ where: { id: payload.sub } });
+    const admin = await banco.admin.findUnique({ where: { id: payload.sub } });
     if (!admin || !admin.ativo) {
       throw erroNaoAutenticado('Administrador inativo ou inexistente.');
     }
@@ -185,7 +185,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
       request.body,
     );
 
-    await prisma.refreshToken.updateMany({
+    await banco.refreshToken.updateMany({
       where: { tokenHash: hashToken(refreshToken), revogadoEm: null },
       data: { revogadoEm: new Date() },
     });
@@ -214,7 +214,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
         request.body,
       );
 
-      const professor = await prisma.professor.findUniqueOrThrow({
+      const professor = await banco.professor.findUniqueOrThrow({
         where: { id: usuario.id },
       });
 
@@ -227,7 +227,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
         throw erroNaoAutenticado('Senha atual incorreta.');
       }
 
-      const atualizado = await prisma.professor.update({
+      const atualizado = await banco.professor.update({
         where: { id: professor.id },
         data: {
           senhaHash: await gerarHashSenha(senhaNova),
@@ -251,7 +251,7 @@ export async function rotasAuth(app: FastifyInstance): Promise<void> {
     { preHandler: exigirProfessor },
     async (request, reply) => {
       const usuario = usuarioAutenticado(request);
-      const professor = await prisma.professor.findUniqueOrThrow({
+      const professor = await banco.professor.findUniqueOrThrow({
         where: { id: usuario.id },
         include: { perfil: true },
       });
@@ -275,7 +275,7 @@ async function emitirSessao(
   const accessToken = gerarAccessToken({ sub: id, papel, nome, email });
   const refresh = gerarRefreshToken(id, papel);
 
-  await prisma.refreshToken.create({
+  await banco.refreshToken.create({
     data: {
       tokenHash: refresh.hash,
       expiraEm: refresh.expiraEm,

@@ -1,14 +1,16 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseEnv } from 'node:util';
 import { z } from 'zod';
 
 const aquiDir = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Carrega o `.env` da raiz do monorepo (ou o `.env` local de apps/api, se
- * existir) usando o carregador nativo do Node, sem depender de `dotenv`.
- * Dentro do Docker as variaveis ja vem do compose e nao ha arquivo para ler.
+ * existir) sem depender de `dotenv`. Variaveis que ja estao no ambiente
+ * (Render, Docker, configuracao dos testes) nunca sao sobrescritas: quem
+ * define o ambiente tem a palavra final.
  */
 function carregarArquivoEnv(): void {
   const candidatos = [resolve(process.cwd(), '.env')];
@@ -24,7 +26,10 @@ function carregarArquivoEnv(): void {
   for (const caminho of candidatos) {
     if (!existsSync(caminho)) continue;
     try {
-      process.loadEnvFile(caminho);
+      const valores = parseEnv(readFileSync(caminho, 'utf8'));
+      for (const [chave, valor] of Object.entries(valores)) {
+        if (process.env[chave] === undefined) process.env[chave] = valor;
+      }
       return;
     } catch {
       // Arquivo ilegivel ou malformado: seguimos com as variaveis do processo.
@@ -32,15 +37,37 @@ function carregarArquivoEnv(): void {
   }
 }
 
-// Se DATABASE_URL ja veio do ambiente (docker compose, CI, setup de teste),
-// o arquivo .env nao e lido — quem define o ambiente tem a palavra final.
-if (!process.env.DATABASE_URL) {
-  carregarArquivoEnv();
-}
+carregarArquivoEnv();
+
+/** Variavel definida mas vazia (comum no painel do Render) conta como ausente. */
+const opcional = <T extends z.ZodTypeAny>(esquema: T) =>
+  z.preprocess((valor) => (valor === '' ? undefined : valor), esquema.optional());
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL e obrigatoria'),
+
+  /**
+   * Onde os dados ficam:
+   *  - `planilha`: Google Sheets via Web App do Apps Script (producao);
+   *  - `arquivo`: JSON local, para desenvolver sem planilha;
+   *  - `memoria`: some ao reiniciar (testes).
+   * Sem valor: `planilha` se APPS_SCRIPT_URL estiver definida; senao
+   * `memoria` nos testes e `arquivo` no desenvolvimento.
+   */
+  ARMAZENAMENTO: opcional(z.enum(['planilha', 'arquivo', 'memoria'])),
+  /** URL do Web App implantado (termina em /exec). */
+  APPS_SCRIPT_URL: opcional(
+    z.string().url('APPS_SCRIPT_URL deve ser a URL do Web App (https://script.google.com/.../exec)'),
+  ),
+  /** Mesmo valor da propriedade CHAVE_API configurada no Apps Script. */
+  APPS_SCRIPT_CHAVE: opcional(
+    z.string().min(32, 'APPS_SCRIPT_CHAVE precisa de ao menos 32 caracteres'),
+  ),
+  /** De quanto em quanto tempo a API rele a planilha (pega edicoes manuais). */
+  PLANILHA_CACHE_SEGUNDOS: z.coerce.number().int().nonnegative().default(60),
+  /** Arquivo usado quando ARMAZENAMENTO=arquivo. */
+  ARQUIVO_DADOS: z.string().default(resolve(aquiDir, '../.dados/banco.json')),
+
   API_PORT: z.coerce.number().int().positive().default(3333),
   API_HOST: z.string().default('0.0.0.0'),
 
@@ -73,7 +100,27 @@ if (!resultado.success) {
   );
 }
 
-export const env = resultado.data;
+const lido = resultado.data;
+
+const armazenamento =
+  lido.ARMAZENAMENTO ??
+  (lido.APPS_SCRIPT_URL ? 'planilha' : lido.NODE_ENV === 'test' ? 'memoria' : 'arquivo');
+
+if (armazenamento === 'planilha' && (!lido.APPS_SCRIPT_URL || !lido.APPS_SCRIPT_CHAVE)) {
+  throw new Error(
+    'Armazenamento "planilha" exige APPS_SCRIPT_URL e APPS_SCRIPT_CHAVE (veja o README, secao "Banco de dados no Google Sheets").',
+  );
+}
+
+// Em producao so a planilha guarda dados de verdade: arquivo ou memoria no
+// Render seriam apagados a cada deploy, sem nenhum aviso.
+if (lido.NODE_ENV === 'production' && armazenamento !== 'planilha') {
+  throw new Error(
+    'Em producao o armazenamento precisa ser a planilha: defina APPS_SCRIPT_URL e APPS_SCRIPT_CHAVE.',
+  );
+}
+
+export const env = { ...lido, ARMAZENAMENTO: armazenamento };
 
 export const origensCors =
   env.CORS_ORIGINS.trim() === '*'

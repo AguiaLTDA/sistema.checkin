@@ -19,19 +19,15 @@
     "dev:dashboard": "npm run dev -w @univc/dashboard",
     "dev:professor-web": "npm run dev -w @univc/professor-web",
     "dev:mobile": "npm start --prefix apps/mobile",
-    "db:migrate": "npm run db:migrate -w @univc/api",
     "db:seed": "npm run db:seed -w @univc/api",
-    "db:reset": "npm run db:reset -w @univc/api",
     "test": "npm run test -w @univc/api",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f api"
+    "docker:logs": "docker compose logs -f api",
+    "importar:supabase": "npm run importar:supabase -w @univc/api --"
   },
   "allowScripts": {
-    "@prisma/client@6.19.3": true,
-    "@prisma/engines@6.19.3": true,
-    "esbuild@0.28.2": true,
-    "prisma@6.19.3": true
+    "esbuild@0.28.2": true
   }
 }

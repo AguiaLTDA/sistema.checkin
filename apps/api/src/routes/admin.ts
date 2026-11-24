@@ -1,4 +1,4 @@
-import type { Professor } from '@prisma/client';
+import type { Professor } from '../dados/modelos.js';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type {
   JornadaProfessor,
@@ -27,9 +27,9 @@ import { registroParaDTO } from '../lib/serializar.js';
 import { gerarHashSenha, gerarSenhaTemporaria } from '../lib/senha.js';
 import { validar } from '../lib/validacao.js';
 import { exigirAdmin, usuarioAutenticado } from '../plugins/autenticacao.js';
-import { prisma } from '../prisma.js';
+import { banco } from '../banco.js';
 
-type ProfessorDoRh = Professor & { perfil: { id: string; nome: string } | null };
+type ProfessorDoRh = Professor & { perfil?: { id: string; nome: string } | null };
 
 /** Cadastro do usuario como o RH ve. Nunca inclui o hash da senha. */
 function professorParaRh(professor: ProfessorDoRh) {
@@ -49,7 +49,7 @@ function professorParaRh(professor: ProfessorDoRh) {
 
 /** Garante que o perfil existe e esta ativo antes de vincular um usuario. */
 async function exigirPerfilAtivo(perfilId: string): Promise<void> {
-  const perfil = await prisma.perfil.findUnique({ where: { id: perfilId } });
+  const perfil = await banco.perfil.findUnique({ where: { id: perfilId } });
   if (!perfil) throw erroValidacao('Perfil informado nao existe.');
   if (!perfil.ativo) {
     throw erroValidacao(`O perfil "${perfil.nome}" esta desativado.`);
@@ -84,8 +84,8 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
     };
 
     const [total, registros] = await Promise.all([
-      prisma.registroPonto.count({ where }),
-      prisma.registroPonto.findMany({
+      banco.registroPonto.count({ where }),
+      banco.registroPonto.findMany({
         where,
         include: { campus: true, professor: { include: { perfil: true } } },
         orderBy: { timestampServidor: 'desc' },
@@ -136,7 +136,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
       throw erroConflito('data_inicio deve ser anterior ou igual a data_fim.');
     }
 
-    const professores = await prisma.professor.findMany({
+    const professores = await banco.professor.findMany({
       where: {
         ...(query.professor_id ? { id: query.professor_id } : {}),
         ...(query.curso ? { cursoVinculado: { equals: query.curso } } : {}),
@@ -146,7 +146,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
       orderBy: { nome: 'asc' },
     });
 
-    const registros = await prisma.registroPonto.findMany({
+    const registros = await banco.registroPonto.findMany({
       where: {
         professorId: { in: professores.map((professor) => professor.id) },
         timestampServidor: { gte: inicio, lt: fim },
@@ -222,7 +222,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
    * popular os filtros e a tela de gestao do dashboard.
    */
   app.get('/admin/professores', async (_request, reply) => {
-    const professores = await prisma.professor.findMany({
+    const professores = await banco.professor.findMany({
       orderBy: { nome: 'asc' },
       include: { perfil: true },
     });
@@ -240,15 +240,15 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
     const dados = validar(professorCriarBodySchema, request.body);
 
     const [emailEmUso, cpfEmUso] = await Promise.all([
-      prisma.professor.findUnique({ where: { email: dados.email } }),
-      prisma.professor.findUnique({ where: { cpf: dados.cpf } }),
+      banco.professor.findUnique({ where: { email: dados.email } }),
+      banco.professor.findUnique({ where: { cpf: dados.cpf } }),
     ]);
     if (emailEmUso) throw erroConflito('Ja existe um professor com este email.');
     if (cpfEmUso) throw erroConflito('Ja existe um professor com este CPF.');
     await exigirPerfilAtivo(dados.perfil_id);
 
     const senhaTemporaria = gerarSenhaTemporaria();
-    const professor = await prisma.professor.create({
+    const professor = await banco.professor.create({
       data: {
         nome: dados.nome,
         cpf: dados.cpf,
@@ -280,7 +280,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
     const { id } = validar(idParamSchema, request.params, 'parametros');
     const dados = validar(professorEditarBodySchema, request.body);
 
-    const professor = await prisma.professor.findUnique({ where: { id } });
+    const professor = await banco.professor.findUnique({ where: { id } });
     if (!professor) throw erroNaoEncontrado('Professor nao encontrado.');
 
     if (dados.perfil_id && dados.perfil_id !== professor.perfilId) {
@@ -288,19 +288,19 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
     }
 
     if (dados.email && dados.email !== professor.email) {
-      const emailEmUso = await prisma.professor.findUnique({
+      const emailEmUso = await banco.professor.findUnique({
         where: { email: dados.email },
       });
       if (emailEmUso) throw erroConflito('Ja existe um professor com este email.');
     }
     if (dados.cpf && dados.cpf !== professor.cpf) {
-      const cpfEmUso = await prisma.professor.findUnique({
+      const cpfEmUso = await banco.professor.findUnique({
         where: { cpf: dados.cpf },
       });
       if (cpfEmUso) throw erroConflito('Ja existe um professor com este CPF.');
     }
 
-    const atualizado = await prisma.professor.update({
+    const atualizado = await banco.professor.update({
       where: { id },
       data: {
         ...(dados.nome !== undefined ? { nome: dados.nome } : {}),
@@ -335,10 +335,10 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
     const admin = usuarioAutenticado(request);
     const { id } = validar(idParamSchema, request.params, 'parametros');
 
-    const professor = await prisma.professor.findUnique({ where: { id } });
+    const professor = await banco.professor.findUnique({ where: { id } });
     if (!professor) throw erroNaoEncontrado('Professor nao encontrado.');
 
-    await prisma.professor.delete({ where: { id } });
+    await banco.professor.delete({ where: { id } });
 
     await registrarAuditoria(request, {
       acao: 'EXCLUSAO_PROFESSOR',
@@ -368,24 +368,22 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
     const admin = usuarioAutenticado(request);
     const { id } = validar(idParamSchema, request.params, 'parametros');
 
-    const professor = await prisma.professor.findUnique({ where: { id } });
+    const professor = await banco.professor.findUnique({ where: { id } });
     if (!professor) throw erroNaoEncontrado('Professor nao encontrado.');
 
     const senhaTemporaria = gerarSenhaTemporaria();
+    const senhaHash = await gerarHashSenha(senhaTemporaria);
 
-    await prisma.$transaction([
-      prisma.professor.update({
+    await banco.$transaction(async (tx) => {
+      await tx.professor.update({
         where: { id },
-        data: {
-          senhaHash: await gerarHashSenha(senhaTemporaria),
-          deveTrocarSenha: true,
-        },
-      }),
-      prisma.refreshToken.updateMany({
+        data: { senhaHash, deveTrocarSenha: true },
+      });
+      await tx.refreshToken.updateMany({
         where: { professorId: id, revogadoEm: null },
         data: { revogadoEm: new Date() },
-      }),
-    ]);
+      });
+    });
 
     await registrarAuditoria(request, {
       acao: 'REDEFINICAO_SENHA',
@@ -399,7 +397,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
 
   /** Cursos distintos com professor cadastrado. */
   app.get('/admin/cursos', async (_request, reply) => {
-    const cursos = await prisma.professor.findMany({
+    const cursos = await banco.professor.findMany({
       distinct: ['cursoVinculado'],
       select: { cursoVinculado: true },
       orderBy: { cursoVinculado: 'asc' },
@@ -409,7 +407,7 @@ export async function rotasAdmin(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/admin/campi', async (_request, reply) => {
-    const campi = await prisma.campus.findMany({ orderBy: { nome: 'asc' } });
+    const campi = await banco.campus.findMany({ orderBy: { nome: 'asc' } });
     return reply.send({
       dados: campi.map((campus) => ({
         id: campus.id,
@@ -434,7 +432,7 @@ async function decidirRegistro(
     request.body,
   );
 
-  const registro = await prisma.registroPonto.findUnique({ where: { id } });
+  const registro = await banco.registroPonto.findUnique({ where: { id } });
   if (!registro) throw erroNaoEncontrado('Registro de ponto nao encontrado.');
 
   if (registro.status !== 'PENDENTE_APROVACAO') {
@@ -443,7 +441,7 @@ async function decidirRegistro(
     );
   }
 
-  const atualizado = await prisma.registroPonto.update({
+  const atualizado = await banco.registroPonto.update({
     where: { id },
     data: {
       status: novoStatus,

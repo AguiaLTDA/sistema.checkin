@@ -2,21 +2,15 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { construirApp } from '../../src/app.js';
 import { gerarHashSenha } from '../../src/lib/senha.js';
-import { prisma } from '../../src/prisma.js';
+import { banco } from '../../src/banco.js';
 
 /**
  * Redefinicao de senha pelo RH (PATCH /admin/professores/:id/redefinir-senha)
  * e troca de senha pelo proprio professor (PATCH /auth/senha).
  *
- * Roda contra um Postgres real (DATABASE_URL_TEST), igual a
- * tests/integration/checkin.test.ts. Se o banco nao estiver disponivel a
- * suite se marca como pulada.
+ * Roda contra a camada de dados real com armazenamento em memoria (o mesmo
+ * motor usado com a planilha), limpo antes de cada teste.
  */
-const bancoDisponivel = await prisma
-  .$connect()
-  .then(() => true)
-  .catch(() => false);
-
 const PROFESSOR = {
   nome: 'Ana Beatriz Rocha',
   cpf: '11122233344',
@@ -27,7 +21,7 @@ const PROFESSOR = {
 
 const ADMIN = { nome: 'RH Teste', email: 'rh@univc.br', senha: 'admin123' };
 
-describe.skipIf(!bancoDisponivel)('redefinicao e troca de senha', () => {
+describe('redefinicao e troca de senha', () => {
   let app: FastifyInstance;
   let professorId: string;
 
@@ -38,15 +32,12 @@ describe.skipIf(!bancoDisponivel)('redefinicao e troca de senha', () => {
 
   afterAll(async () => {
     await app?.close();
-    await prisma.$disconnect();
   });
 
   beforeEach(async () => {
-    await prisma.$executeRawUnsafe(
-      'TRUNCATE TABLE "logs_auditoria", "refresh_tokens", "registros_ponto", "campi", "professores", "admins" RESTART IDENTITY CASCADE',
-    );
+    await banco.$limpar();
 
-    const professor = await prisma.professor.create({
+    const professor = await banco.professor.create({
       data: {
         nome: PROFESSOR.nome,
         cpf: PROFESSOR.cpf,
@@ -57,7 +48,7 @@ describe.skipIf(!bancoDisponivel)('redefinicao e troca de senha', () => {
     });
     professorId = professor.id;
 
-    await prisma.admin.create({
+    await banco.admin.create({
       data: {
         nome: ADMIN.nome,
         email: ADMIN.email,
@@ -127,7 +118,7 @@ describe.skipIf(!bancoDisponivel)('redefinicao e troca de senha', () => {
     expect(loginNovo.statusCode).toBe(200);
     expect(loginNovo.json().usuario.deve_trocar_senha).toBe(true);
 
-    const professor = await prisma.professor.findUniqueOrThrow({
+    const professor = await banco.professor.findUniqueOrThrow({
       where: { id: professorId },
     });
     expect(professor.deveTrocarSenha).toBe(true);

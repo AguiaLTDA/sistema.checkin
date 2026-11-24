@@ -1,14 +1,19 @@
 import { construirApp } from './app.js';
+import { banco } from './banco.js';
 import { env } from './env.js';
-import { prisma } from './prisma.js';
 
 async function principal(): Promise<void> {
   const app = await construirApp();
 
+  // Prepara as abas e le os cadastros antes de aceitar requisicoes: se a
+  // planilha estiver mal configurada (URL, chave, implantacao), o deploy falha
+  // aqui com a mensagem certa em vez de cada requisicao falhar depois.
+  await banco.iniciar();
+  app.log.info(`dados em: ${banco.armazenamento.descricao}`);
+
   const encerrar = async (sinal: string) => {
     app.log.info(`recebido ${sinal}, encerrando...`);
     await app.close();
-    await prisma.$disconnect();
     process.exit(0);
   };
 

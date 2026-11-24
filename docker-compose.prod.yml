@@ -1,7 +1,7 @@
 # Compose de producao do UNIVC Check-in.
 #
-# Nao inclui banco (o Postgres e o Supabase, externo) nem proxy TLS: este
-# projeto so sobe a API e o dashboard buildado, e se conecta a uma rede
+# Nao inclui banco (os dados ficam na planilha do Google, via Apps Script) nem
+# proxy TLS: este projeto so sobe a API e o dashboard buildado, e se conecta a uma rede
 # Docker externa onde ja existe um Caddy publico fazendo HTTPS + reverse
 # proxy (ver README, secao "Deploy na VPS", e deploy/vps/).
 #
@@ -19,7 +19,9 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL}
+      APPS_SCRIPT_URL: ${APPS_SCRIPT_URL}
+      APPS_SCRIPT_CHAVE: ${APPS_SCRIPT_CHAVE}
+      PLANILHA_CACHE_SEGUNDOS: ${PLANILHA_CACHE_SEGUNDOS:-60}
       API_PORT: 3333
       API_HOST: 0.0.0.0
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
@@ -30,9 +32,7 @@ services:
       CHECKIN_RATE_LIMIT_MAX: ${CHECKIN_RATE_LIMIT_MAX:-10}
       CHECKIN_RATE_LIMIT_WINDOW: ${CHECKIN_RATE_LIMIT_WINDOW:-1 minute}
       RELATORIO_TIMEZONE: ${RELATORIO_TIMEZONE:-America/Sao_Paulo}
-      # Aplica migrations no boot (idempotente); NUNCA popula dados de
-      # demonstracao em producao.
-      RUN_MIGRATIONS_ON_BOOT: "true"
+      # NUNCA popula dados de demonstracao em producao.
       RUN_SEED_ON_BOOT: "false"
     networks:
       - publico

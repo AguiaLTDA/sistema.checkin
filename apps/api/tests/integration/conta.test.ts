@@ -2,21 +2,16 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { construirApp } from '../../src/app.js';
 import { gerarHashSenha } from '../../src/lib/senha.js';
-import { prisma } from '../../src/prisma.js';
+import { banco } from '../../src/banco.js';
 
 /**
  * Conta do proprio RH: editar nome/email (PATCH /admin/conta) e trocar a
  * senha (PATCH /admin/conta/senha). Mesmo banco de teste das demais suites.
  */
-const bancoDisponivel = await prisma
-  .$connect()
-  .then(() => true)
-  .catch(() => false);
-
 const ADMIN = { nome: 'RH Teste', email: 'rh@univc.br', senha: 'admin123' };
 const OUTRO_ADMIN = { nome: 'Coordenacao', email: 'coord@univc.br', senha: 'coord123' };
 
-describe.skipIf(!bancoDisponivel)('conta do proprio RH', () => {
+describe('conta do proprio RH', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
@@ -26,15 +21,12 @@ describe.skipIf(!bancoDisponivel)('conta do proprio RH', () => {
 
   afterAll(async () => {
     await app?.close();
-    await prisma.$disconnect();
   });
 
   beforeEach(async () => {
-    await prisma.$executeRawUnsafe(
-      'TRUNCATE TABLE "logs_auditoria", "refresh_tokens", "registros_ponto", "campi", "professores", "perfis", "admins" RESTART IDENTITY CASCADE',
-    );
+    await banco.$limpar();
     for (const admin of [ADMIN, OUTRO_ADMIN]) {
-      await prisma.admin.create({
+      await banco.admin.create({
         data: {
           nome: admin.nome,
           email: admin.email,
@@ -105,7 +97,7 @@ describe.skipIf(!bancoDisponivel)('conta do proprio RH', () => {
     const token = await tokenDoAdmin();
     await patch(token, '/admin/conta', { nome: 'Somente Eu' });
 
-    const outro = await prisma.admin.findUniqueOrThrow({
+    const outro = await banco.admin.findUniqueOrThrow({
       where: { email: OUTRO_ADMIN.email },
     });
     expect(outro.nome).toBe(OUTRO_ADMIN.nome);
@@ -130,7 +122,7 @@ describe.skipIf(!bancoDisponivel)('conta do proprio RH', () => {
     const token = await tokenDoAdmin();
     await patch(token, '/admin/conta', { nome: 'Rejane Ferreira' });
 
-    const log = await prisma.logAuditoria.findFirst({ where: { acao: 'EDICAO_ADMIN' } });
+    const log = await banco.logAuditoria.findFirst({ where: { acao: 'EDICAO_ADMIN' } });
     expect(log?.adminId).toBeTruthy();
     expect(log?.detalhes).toEqual({ campos: ['nome'] });
   });
@@ -195,8 +187,8 @@ describe.skipIf(!bancoDisponivel)('conta do proprio RH', () => {
     });
     expect(semToken.statusCode).toBe(401);
 
-    const perfil = await prisma.perfil.create({ data: { nome: 'Professor' } });
-    await prisma.professor.create({
+    const perfil = await banco.perfil.create({ data: { nome: 'Professor' } });
+    await banco.professor.create({
       data: {
         nome: 'Ana Rocha',
         cpf: '11122233344',

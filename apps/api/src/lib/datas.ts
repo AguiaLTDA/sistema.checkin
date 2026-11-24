@@ -93,7 +93,7 @@ export function interpretarData(
 }
 
 /**
- * Monta o filtro de periodo do Prisma para `timestampServidor`.
+ * Monta o filtro de periodo do banco para `timestampServidor`.
  * `data_fim` e sempre tratada como limite exclusivo (inicio do dia seguinte).
  */
 export function filtroPeriodo(

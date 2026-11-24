@@ -7,16 +7,17 @@
  * de jornada ja tenham o que mostrar no primeiro `docker compose up`.
  *
  * O script e idempotente: rodar de novo atualiza os cadastros e nao duplica os
- * registros de exemplo.
+ * registros de exemplo. Grava no armazenamento configurado (arquivo local por
+ * padrao, ou a planilha se APPS_SCRIPT_URL estiver definida) e se recusa a
+ * rodar com NODE_ENV=production, para nunca misturar dados ficticios com os
+ * reais.
  */
-import { PrismaClient, type TipoRegistro } from '@prisma/client';
-// Importado pelo efeito colateral de carregar o .env da raiz do monorepo.
+import { banco } from '../src/banco.js';
+import type { TipoRegistro } from '../src/dados/modelos.js';
 import { env } from '../src/env.js';
 import { inicioDoDia } from '../src/lib/datas.js';
 import { chaveDoDia } from '../src/lib/jornada.js';
 import { gerarHashSenha } from '../src/lib/senha.js';
-
-const prisma = new PrismaClient();
 
 /**
  * Instante UTC correspondente a `hora:minuto` de `diasAtras` dias atras, no
@@ -126,8 +127,20 @@ const ADMIN = {
 const PONTO_FORA_DO_RAIO = { latitude: -18.71600, longitude: -39.86322 };
 
 async function main(): Promise<void> {
+  if (env.NODE_ENV === 'production') {
+    throw new Error('seed bloqueado em producao: ele grava usuarios e registros ficticios.');
+  }
+  // A planilha configurada pode ser a de producao. Gravar dados ficticios
+  // nela exige pedir explicitamente (ex.: uma planilha de testes).
+  if (env.ARMAZENAMENTO === 'planilha' && !process.argv.includes('--na-planilha')) {
+    throw new Error(
+      'seed nao grava na planilha sem --na-planilha (use so com uma planilha de TESTE). ' +
+        'Para levar dados reais, use o importador do backup.',
+    );
+  }
+
   console.log('> seed: campus');
-  const campus = await prisma.campus.upsert({
+  const campus = await banco.campus.upsert({
     where: { nome: CAMPUS_UNIVC.nome },
     update: CAMPUS_UNIVC,
     create: CAMPUS_UNIVC,
@@ -135,7 +148,7 @@ async function main(): Promise<void> {
 
   console.log('> seed: administrador de RH');
   const senhaHashAdmin = await gerarHashSenha(SENHA_ADMIN);
-  await prisma.admin.upsert({
+  await banco.admin.upsert({
     where: { email: ADMIN.email },
     update: { nome: ADMIN.nome, senhaHash: senhaHashAdmin, ativo: true },
     create: { ...ADMIN, senhaHash: senhaHashAdmin },
@@ -144,7 +157,7 @@ async function main(): Promise<void> {
   console.log('> seed: perfis');
   const idsPerfil = new Map<NomePerfil, string>();
   for (const perfil of PERFIS) {
-    const salvo = await prisma.perfil.upsert({
+    const salvo = await banco.perfil.upsert({
       where: { nome: perfil.nome },
       update: {},
       create: perfil,
@@ -158,7 +171,7 @@ async function main(): Promise<void> {
   for (const { perfil, ...dados } of PROFESSORES) {
     const perfilId = idsPerfil.get(perfil) ?? null;
     professores.push(
-      await prisma.professor.upsert({
+      await banco.professor.upsert({
         where: { email: dados.email },
         update: { ...dados, perfilId, senhaHash: senhaHashProfessor, ativo: true },
         create: { ...dados, perfilId, senhaHash: senhaHashProfessor },
@@ -166,7 +179,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const jaTemRegistros = await prisma.registroPonto.count();
+  const jaTemRegistros = await banco.registroPonto.count();
   if (jaTemRegistros > 0) {
     console.log(
       `> seed: ${jaTemRegistros} registros ja existem, pulando os de exemplo`,
@@ -253,7 +266,7 @@ async function main(): Promise<void> {
       CAMPUS_UNIVC.longitudeCentral,
     );
 
-    await prisma.registroPonto.create({
+    await banco.registroPonto.create({
       data: {
         professorId: registro.professorId,
         tipo: registro.tipo,
@@ -301,9 +314,7 @@ async function resumo(): Promise<void> {
   );
 }
 
-main()
-  .catch((erro) => {
-    console.error('falha no seed:', erro);
-    process.exitCode = 1;
-  })
-  .finally(() => prisma.$disconnect());
+main().catch((erro) => {
+  console.error('falha no seed:', erro);
+  process.exitCode = 1;
+});

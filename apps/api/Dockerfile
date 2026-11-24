@@ -1,12 +1,7 @@
-# Imagem de desenvolvimento da API (o alvo do MVP e o ambiente local; nao ha
-# hardening de producao aqui). O contexto de build e a raiz do monorepo, porque
-# a API depende do workspace @univc/shared.
+# Imagem da API. O contexto de build e a raiz do monorepo, porque a API
+# depende do workspace @univc/shared. Os dados ficam na planilha do Google
+# (Apps Script), entao a imagem nao precisa de cliente de banco nem de OpenSSL.
 FROM node:22-slim
-
-# O Prisma precisa do OpenSSL para carregar o query engine.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -27,10 +22,6 @@ COPY apps/api apps/api
 RUN npm run build -w @univc/shared
 
 WORKDIR /app/apps/api
-
-# `prisma generate` exige a variavel presente para validar o schema, mas nao
-# abre conexao: no boot o entrypoint usa a DATABASE_URL real do compose.
-RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npx prisma generate
 
 RUN npm run build
 

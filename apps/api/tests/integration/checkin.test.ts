@@ -2,26 +2,15 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { construirApp } from '../../src/app.js';
 import { gerarHashSenha } from '../../src/lib/senha.js';
-import { prisma } from '../../src/prisma.js';
+import { banco } from '../../src/banco.js';
 
 /**
  * Teste de integracao do fluxo completo de check-in: login -> POST /checkin ->
  * persistencia -> historico -> aprovacao manual pelo RH.
  *
- * Roda contra um Postgres real (DATABASE_URL_TEST). Se o banco nao estiver
- * disponivel a suite se marca como pulada, para nao quebrar `npm test` em uma
- * maquina sem Docker ligado.
+ * Roda contra a camada de dados real com armazenamento em memoria (o mesmo
+ * motor usado com a planilha), limpo antes de cada teste.
  */
-const bancoDisponivel = await prisma
-  .$connect()
-  .then(() => true)
-  .catch(() => {
-    console.warn(
-      '[testes] Postgres indisponivel: pulando a integracao. Suba com `docker compose up -d db`.',
-    );
-    return false;
-  });
-
 const CAMPUS = {
   nome: 'Campus de Teste',
   latitudeCentral: -18.70046,
@@ -44,7 +33,7 @@ const PROFESSOR = {
 
 const ADMIN = { nome: 'RH Teste', email: 'rh@univc.br', senha: 'admin123' };
 
-describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
+describe('fluxo completo de check-in', () => {
   let app: FastifyInstance;
   let professorId: string;
   let campusId: string;
@@ -56,19 +45,16 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
 
   afterAll(async () => {
     await app?.close();
-    await prisma.$disconnect();
   });
 
   beforeEach(async () => {
-    await prisma.$executeRawUnsafe(
-      'TRUNCATE TABLE "logs_auditoria", "refresh_tokens", "registros_ponto", "campi", "professores", "admins" RESTART IDENTITY CASCADE',
-    );
+    await banco.$limpar();
 
-    const campus = await prisma.campus.create({ data: CAMPUS });
+    const campus = await banco.campus.create({ data: CAMPUS });
     campusId = campus.id;
 
     const senhaHash = await gerarHashSenha(PROFESSOR.senha);
-    const professor = await prisma.professor.create({
+    const professor = await banco.professor.create({
       data: {
         nome: PROFESSOR.nome,
         cpf: PROFESSOR.cpf,
@@ -79,7 +65,7 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     });
     professorId = professor.id;
 
-    await prisma.admin.create({
+    await banco.admin.create({
       data: {
         nome: ADMIN.nome,
         email: ADMIN.email,
@@ -148,7 +134,7 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     expect(timestamp).toBeGreaterThanOrEqual(antes - 1_000);
     expect(timestamp).toBeLessThanOrEqual(Date.now() + 1_000);
 
-    const salvo = await prisma.registroPonto.findUniqueOrThrow({
+    const salvo = await banco.registroPonto.findUniqueOrThrow({
       where: { id: corpo.registro.id },
     });
     expect(salvo.professorId).toBe(professorId);
@@ -203,7 +189,7 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     expect(resposta.json().detalhes.map((d: { campo: string }) => d.campo)).toEqual(
       expect.arrayContaining(['latitude', 'longitude']),
     );
-    expect(await prisma.registroPonto.count()).toBe(0);
+    expect(await banco.registroPonto.count()).toBe(0);
   });
 
   it('manda para aprovacao do RH um registro fora do raio', async () => {
@@ -260,7 +246,7 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     expect(segunda.statusCode).toBe(409);
     expect(segunda.json().erro).toBe('CONFLITO');
     expect(segunda.json().detalhes.proximo_tipo_esperado).toBe('SAIDA');
-    expect(await prisma.registroPonto.count()).toBe(1);
+    expect(await banco.registroPonto.count()).toBe(1);
   });
 
   it('completa chegada e saida e devolve os dois no historico', async () => {
@@ -309,7 +295,7 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
       ...DENTRO_DO_RAIO,
     });
 
-    const logs = await prisma.logAuditoria.findMany({
+    const logs = await banco.logAuditoria.findMany({
       where: { acao: 'TENTATIVA_CHECKIN' },
       orderBy: { criadoEm: 'asc' },
     });
@@ -333,7 +319,7 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     });
 
     expect(resposta.statusCode).toBe(401);
-    expect(await prisma.registroPonto.count()).toBe(0);
+    expect(await banco.registroPonto.count()).toBe(0);
   });
 
   it('recusa payload invalido com detalhes por campo', async () => {
@@ -350,7 +336,7 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     expect(corpo.detalhes.map((d: { campo: string }) => d.campo)).toEqual(
       expect.arrayContaining(['tipo', 'latitude', 'longitude']),
     );
-    expect(await prisma.registroPonto.count()).toBe(0);
+    expect(await banco.registroPonto.count()).toBe(0);
   });
 
   it('recusa login com senha errada', async () => {
@@ -361,7 +347,7 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     });
 
     expect(resposta.statusCode).toBe(401);
-    const logs = await prisma.logAuditoria.findMany({
+    const logs = await banco.logAuditoria.findMany({
       where: { acao: 'LOGIN_FALHA' },
     });
     expect(logs).toHaveLength(1);
@@ -400,7 +386,7 @@ describe.skipIf(!bancoDisponivel)('fluxo completo de check-in', () => {
     expect(aprovacao.json().registro.status).toBe('VALIDADO');
     expect(aprovacao.json().registro.justificativa_manual).toContain('forum');
 
-    const salvo = await prisma.registroPonto.findUniqueOrThrow({
+    const salvo = await banco.registroPonto.findUniqueOrThrow({
       where: { id: registroId },
     });
     expect(salvo.status).toBe('VALIDADO');

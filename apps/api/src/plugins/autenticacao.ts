@@ -2,7 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { PapelUsuario } from '@univc/shared';
 import { erroNaoAutenticado, erroSemPermissao } from '../lib/erros.js';
 import { verificarAccessToken } from '../lib/tokens.js';
-import { prisma } from '../prisma.js';
+import { banco } from '../banco.js';
 
 export interface UsuarioRequisicao {
   id: string;
@@ -42,7 +42,7 @@ export async function exigirProfessor(
     throw erroSemPermissao('Esta rota e exclusiva de professores.');
   }
 
-  const professor = await prisma.professor.findUnique({
+  const professor = await banco.professor.findUnique({
     where: { id: payload.sub },
     select: { id: true, nome: true, email: true, ativo: true },
   });
@@ -70,7 +70,7 @@ export async function exigirAdmin(
     throw erroSemPermissao('Esta rota e exclusiva do RH/coordenacao.');
   }
 
-  const admin = await prisma.admin.findUnique({
+  const admin = await banco.admin.findUnique({
     where: { id: payload.sub },
     select: { id: true, nome: true, email: true, ativo: true },
   });

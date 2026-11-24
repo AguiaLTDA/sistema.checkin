@@ -6,8 +6,8 @@
 # preenchidas manualmente no painel (veja a secao "Deploy no Render" do
 # README para o passo a passo e a ordem de preenchimento).
 #
-# O banco continua sendo o Supabase configurado externamente: este blueprint
-# nao cria banco de dados no Render.
+# Os dados ficam numa planilha do Google, acessada pelo Web App do Apps Script
+# (apps/apps-script/Code.gs): este blueprint nao cria banco de dados no Render.
 
 services:
   - type: web
@@ -19,9 +19,7 @@ services:
     buildCommand: >-
       npm ci &&
       npm run build:shared &&
-      npx prisma generate --schema=apps/api/prisma/schema.prisma &&
-      npm run build -w @univc/api &&
-      npx prisma migrate deploy --schema=apps/api/prisma/schema.prisma
+      npm run build -w @univc/api
     startCommand: npm run start -w @univc/api
     healthCheckPath: /health
     envVars:
@@ -31,9 +29,14 @@ services:
         value: production
       - key: API_HOST
         value: 0.0.0.0
-      # Connection string do Supabase (pooler, porta 5432) - preencher no painel.
-      - key: DATABASE_URL
+      # URL do Web App do Apps Script (termina em /exec) - preencher no painel.
+      - key: APPS_SCRIPT_URL
         sync: false
+      # Mesma chave gravada no Apps Script pela funcao configurarChave.
+      - key: APPS_SCRIPT_CHAVE
+        sync: false
+      - key: PLANILHA_CACHE_SEGUNDOS
+        value: "60"
       - key: JWT_ACCESS_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET

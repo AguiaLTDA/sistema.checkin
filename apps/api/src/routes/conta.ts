@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import {
   alterarSenhaBodySchema,
@@ -10,7 +9,8 @@ import { conferirSenha, gerarHashSenha } from '../lib/senha.js';
 import { adminParaUsuario } from '../lib/serializar.js';
 import { validar } from '../lib/validacao.js';
 import { exigirAdmin, usuarioAutenticado } from '../plugins/autenticacao.js';
-import { prisma } from '../prisma.js';
+import { banco } from '../banco.js';
+import { ErroUnicidade } from '../dados/banco.js';
 
 /**
  * Conta do proprio RH: o administrador logado edita os seus dados de cadastro
@@ -26,7 +26,7 @@ export async function rotasConta(app: FastifyInstance): Promise<void> {
 
     let atualizado;
     try {
-      atualizado = await prisma.admin.update({
+      atualizado = await banco.admin.update({
         where: { id: logado.id },
         data: {
           ...(dados.nome !== undefined ? { nome: dados.nome } : {}),
@@ -34,10 +34,7 @@ export async function rotasConta(app: FastifyInstance): Promise<void> {
         },
       });
     } catch (erro) {
-      if (
-        erro instanceof Prisma.PrismaClientKnownRequestError &&
-        erro.code === 'P2002'
-      ) {
+      if (erro instanceof ErroUnicidade) {
         throw erroConflito('Ja existe um administrador com este email.');
       }
       throw erro;
@@ -66,7 +63,7 @@ export async function rotasConta(app: FastifyInstance): Promise<void> {
       request.body,
     );
 
-    const admin = await prisma.admin.findUniqueOrThrow({
+    const admin = await banco.admin.findUniqueOrThrow({
       where: { id: logado.id },
     });
 
@@ -79,16 +76,16 @@ export async function rotasConta(app: FastifyInstance): Promise<void> {
       throw erroNaoAutenticado('Senha atual incorreta.');
     }
 
-    await prisma.$transaction([
-      prisma.admin.update({
-        where: { id: admin.id },
-        data: { senhaHash: await gerarHashSenha(senhaNova) },
-      }),
-      prisma.refreshToken.updateMany({
+    // Hash fora da transacao: o bcrypt leva ~100 ms e nao precisa segurar a
+    // fila de escrita da planilha.
+    const senhaHash = await gerarHashSenha(senhaNova);
+    await banco.$transaction(async (tx) => {
+      await tx.admin.update({ where: { id: admin.id }, data: { senhaHash } });
+      await tx.refreshToken.updateMany({
         where: { adminId: admin.id, revogadoEm: null },
         data: { revogadoEm: new Date() },
-      }),
-    ]);
+      });
+    });
 
     await registrarAuditoria(request, {
       acao: 'ALTERACAO_SENHA',

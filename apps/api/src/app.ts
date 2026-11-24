@@ -4,6 +4,9 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { createHash } from 'node:crypto';
 import type { ErroApi } from '@univc/shared';
 import { env, origensCors } from './env.js';
+import { ErroArmazenamento } from './dados/armazenamento.js';
+import { ErroRegistroInexistente, ErroUnicidade } from './dados/banco.js';
+import { ErroDadosPlanilha } from './dados/esquema.js';
 import { ErroHttp } from './lib/erros.js';
 import { rotasAdmin } from './routes/admin.js';
 import { rotasAuth } from './routes/auth.js';
@@ -74,6 +77,36 @@ export async function construirApp(): Promise<FastifyInstance> {
         ...(erro.detalhes ? { detalhes: erro.detalhes } : {}),
       };
       return reply.status(erro.statusCode).send(corpo);
+    }
+
+    if (erro instanceof ErroUnicidade) {
+      const corpo: ErroApi = { erro: 'CONFLITO', mensagem: erro.message };
+      return reply.status(409).send(corpo);
+    }
+
+    if (erro instanceof ErroRegistroInexistente) {
+      const corpo: ErroApi = { erro: 'NAO_ENCONTRADO', mensagem: erro.message };
+      return reply.status(404).send(corpo);
+    }
+
+    if (erro instanceof ErroArmazenamento) {
+      request.log.error({ erro }, 'planilha indisponivel');
+      const corpo: ErroApi = {
+        erro: 'ARMAZENAMENTO_INDISPONIVEL',
+        mensagem: 'A base de dados (planilha) nao respondeu. Tente novamente em instantes.',
+      };
+      return reply.status(503).send(corpo);
+    }
+
+    if (erro instanceof ErroDadosPlanilha) {
+      // A mensagem diz a aba, a coluna e o id da linha, mas nao o valor da
+      // celula (que pode ser um CPF ou email): suficiente para corrigir.
+      request.log.error({ erro }, 'dado invalido na planilha');
+      const corpo: ErroApi = {
+        erro: 'DADO_INVALIDO_NA_PLANILHA',
+        mensagem: erro.message,
+      };
+      return reply.status(503).send(corpo);
     }
 
     // Erros do proprio Fastify (payload malformado, 415, etc.) ja trazem

@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import {
   atualizarPerfilBodySchema,
@@ -10,7 +9,8 @@ import { erroConflito, erroNaoEncontrado } from '../lib/erros.js';
 import { perfilParaDTO } from '../lib/serializar.js';
 import { validar } from '../lib/validacao.js';
 import { exigirAdmin, usuarioAutenticado } from '../plugins/autenticacao.js';
-import { prisma } from '../prisma.js';
+import { banco } from '../banco.js';
+import { ErroUnicidade } from '../dados/banco.js';
 
 /**
  * Perfis que classificam quem bate ponto (Professor, Estagiario, Estudante...).
@@ -21,7 +21,7 @@ export async function rotasPerfis(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', exigirAdmin);
 
   app.get('/admin/perfis', async (_request, reply) => {
-    const perfis = await prisma.perfil.findMany({
+    const perfis = await banco.perfil.findMany({
       orderBy: { nome: 'asc' },
       include: { _count: { select: { usuarios: true } } },
     });
@@ -33,7 +33,7 @@ export async function rotasPerfis(app: FastifyInstance): Promise<void> {
     const corpo = validar(criarPerfilBodySchema, request.body);
 
     const perfil = await comNomeUnico(() =>
-      prisma.perfil.create({
+      banco.perfil.create({
         data: { nome: corpo.nome, descricao: corpo.descricao || null },
         include: { _count: { select: { usuarios: true } } },
       }),
@@ -54,11 +54,11 @@ export async function rotasPerfis(app: FastifyInstance): Promise<void> {
     const { id } = validar(idParamSchema, request.params, 'parametros');
     const corpo = validar(atualizarPerfilBodySchema, request.body);
 
-    const existente = await prisma.perfil.findUnique({ where: { id } });
+    const existente = await banco.perfil.findUnique({ where: { id } });
     if (!existente) throw erroNaoEncontrado('Perfil nao encontrado.');
 
     const perfil = await comNomeUnico(() =>
-      prisma.perfil.update({
+      banco.perfil.update({
         where: { id },
         data: {
           ...(corpo.nome !== undefined ? { nome: corpo.nome } : {}),
@@ -86,15 +86,12 @@ export async function rotasPerfis(app: FastifyInstance): Promise<void> {
   });
 }
 
-/** Converte a violacao de unicidade do nome (P2002) em 409 legivel. */
+/** Converte a violacao de unicidade do nome em 409 com mensagem legivel. */
 async function comNomeUnico<T>(operacao: () => Promise<T>): Promise<T> {
   try {
     return await operacao();
   } catch (erro) {
-    if (
-      erro instanceof Prisma.PrismaClientKnownRequestError &&
-      erro.code === 'P2002'
-    ) {
+    if (erro instanceof ErroUnicidade) {
       throw erroConflito('Ja existe um perfil com este nome.');
     }
     throw erro;

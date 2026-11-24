@@ -20,6 +20,8 @@ o RH decide, com justificativa obrigatória.
 
 - [Arquitetura](#arquitetura)
 - [Subindo o ambiente](#subindo-o-ambiente)
+- [Banco de dados no Google Sheets](#banco-de-dados-no-google-sheets)
+- [Migração do backup do Supabase](#migração-do-backup-do-supabase)
 - [Deploy no Render](#deploy-no-render)
 - [Deploy na VPS](#deploy-na-vps)
 - [Usuários de teste](#usuários-de-teste)
@@ -42,23 +44,24 @@ Monorepo com npm workspaces:
 ```
 sistema.checkin/
 ├── apps/
-│   ├── api/            @univc/api            Fastify + Prisma + PostgreSQL
+│   ├── api/            @univc/api            Fastify + camada de dados sobre o Google Sheets
+│   ├── apps-script/    Code.gs               Web App do Apps Script que le/grava a planilha
 │   ├── dashboard/      @univc/dashboard      React + Vite + Tailwind (RH/coordenação)
 │   ├── professor-web/  @univc/professor-web  React + Vite (professores, no navegador)
 │   └── mobile/         app Expo (React Native) — professores, alternativa nativa
 ├── packages/
 │   └── shared/       @univc/shared     enums, schemas zod e tipos da API
-├── docker/           init do Postgres
 └── docker-compose.yml
 ```
 
 | Camada          | Stack                                                                 |
 | --------------- | --------------------------------------------------------------------- |
-| API             | Node 22, TypeScript, Fastify 5, Prisma 6, PostgreSQL 16, zod, JWT      |
+| API             | Node 22, TypeScript, Fastify 5, zod, JWT                               |
+| Dados           | Google Sheets, acessado por um Web App do Apps Script (`apps/apps-script/Code.gs`) |
 | Dashboard       | React 19, Vite, Tailwind 4, React Router (RH/coordenação)              |
 | App do professor | React 19, Vite, Tailwind 4 — roda no navegador, usa a Geolocation API do próprio aparelho |
 | Mobile (Expo)   | Expo SDK 57, React Native 0.86, `expo-location` — alternativa nativa ao app web |
-| Testes          | Vitest (unitários puros + integração contra Postgres real)            |
+| Testes          | Vitest (unitários + integração, também pelo `Code.gs` numa planilha simulada) |
 
 **Por que existem duas versões do app do professor.** Desde que a validação do
 check-in passou a depender só da localização (sem biometria), o navegador
@@ -82,8 +85,12 @@ contrato da API, atualize os dois arquivos.
 
 ### Pré-requisitos
 
-- Docker + Docker Compose, **ou** Node 22+ e PostgreSQL 16 locais
-- Node 22+ (para o dashboard e o app mobile, que rodam fora do Docker)
+- Node 22+
+- Docker + Docker Compose (opcional)
+
+Não há banco para instalar. Em desenvolvimento a API grava num arquivo JSON
+local; em produção, numa planilha do Google (veja
+[Banco de dados no Google Sheets](#banco-de-dados-no-google-sheets)).
 
 ### 1. Variáveis de ambiente
 
@@ -91,24 +98,19 @@ contrato da API, atualize os dois arquivos.
 cp .env.example .env
 ```
 
-Os valores padrão já funcionam em desenvolvimento. Vale ler os comentários do
-arquivo — em especial `DATABASE_URL` (usada quando você roda a API **fora** do
-Docker; dentro do compose o container monta a própria URL apontando para o
-serviço `db`).
+Os valores padrão já funcionam em desenvolvimento. Com `APPS_SCRIPT_URL` vazia,
+os dados vão para `apps/api/.dados/banco.json`, que fica fora do git porque
+contém hashes de senha.
 
-### 2. API + banco com Docker
+### 2. API com Docker
 
 ```bash
 docker compose up -d --build
 ```
 
-Isso sobe:
-
-- **`db`** — PostgreSQL 16 em `localhost:5432`, com o banco de testes
-  `univc_checkin_test` criado junto;
-- **`api`** — a API em `http://localhost:3333`, que no boot aplica as migrations
-  (`prisma migrate deploy`) e roda o seed, porque `RUN_MIGRATIONS_ON_BOOT` e
-  `RUN_SEED_ON_BOOT` estão como `true` no `docker-compose.yml`.
+Sobe a API em `http://localhost:3333`, com os dados num volume Docker
+(`dados`) e o seed rodando no boot (`RUN_SEED_ON_BOOT=true`). O seed é
+idempotente e **nunca grava na planilha**.
 
 Conferindo:
 
@@ -117,41 +119,13 @@ curl localhost:3333/health
 docker compose logs -f api
 ```
 
-### 3. Sem Docker (Postgres local)
+### 3. Sem Docker
 
 ```bash
 npm install                 # instala os workspaces e compila @univc/shared
-createdb univc_checkin
-createdb univc_checkin_test # usado pelos testes de integração
-npm run db:migrate          # prisma migrate dev
-npm run db:seed
+npm run db:seed             # usuarios, campus e registros de exemplo
 npm run dev:api             # http://localhost:3333
 ```
-
-### 3.1. Banco no Supabase (nuvem)
-
-O banco de desenvolvimento na nuvem é o projeto Supabase **`univc-checkin`**
-(ref `ypnsyqawajgovbbqrcle`, região `sa-east-1`/São Paulo). O schema da
-migration `20260813202659_inicial` já está aplicado e registrado em
-`_prisma_migrations`, então `prisma migrate deploy` reconhece o banco como
-atualizado.
-
-1. No painel do Supabase, abra **Connect** e copie a connection string do
-   **Session pooler** (porta `5432`). O endereço direto
-   (`db.<ref>.supabase.co`) só aceita IPv6 no plano gratuito e não funciona a
-   partir do Render.
-2. Use essa string como `DATABASE_URL` no `.env` (local) ou nas variáveis de
-   ambiente do serviço no Render, trocando `[YOUR-PASSWORD]` pela senha do
-   banco. Ela serve tanto para a API quanto para as migrations.
-3. Para popular o banco com os dados de exemplo: `npm run db:seed`.
-
-Todas as tabelas estão com RLS ativo e sem policies: a Data API do Supabase
-(chaves `anon`/`publishable`) não lê nem grava nada, e só a API, conectada
-pelo Prisma com o usuário `postgres`, acessa os dados. Mantenha assim ao criar
-tabelas novas (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY` na migration).
-
-Não aponte `DATABASE_URL_TEST` para o Supabase: os testes de integração
-truncam as tabelas.
 
 ### 4. Painel web (RH + usuário)
 
@@ -182,8 +156,8 @@ Screenshots de cada tela ficam em [`docs/telas/`](docs/telas/).
 
 #### Usuários e perfis
 
-- **Perfis** (`/rh/perfis`): a migration cria *Professor*, *Estagiário* e
-  *Estudante*. O RH cria outros, renomeia (o novo nome vale para todos os
+- **Perfis** (`/rh/perfis`): *Professor*, *Estagiário* e *Estudante* vêm do
+  seed (local) ou da importação do backup (produção). O RH cria outros, renomeia (o novo nome vale para todos os
   usuários do perfil) e desativa (o perfil some do cadastro, mas quem já o usa
   continua com ele).
 - **Usuários** (`/rh/usuarios`): o RH cria o acesso com nome, CPF, email (que é
@@ -214,19 +188,138 @@ npm run dev:professor-web   # http://localhost:5174
 
 | Comando                 | O que faz                                            |
 | ----------------------- | ---------------------------------------------------- |
-| `npm run db:migrate`    | cria/aplica migrations em desenvolvimento            |
-| `npm run db:seed`       | popula campus, RH, professores e registros de exemplo |
-| `npm run db:reset`      | derruba o banco, reaplica tudo e roda o seed         |
-| `npm test`              | suíte completa da API                                |
+| `npm run db:seed`       | popula campus, RH, professores e registros de exemplo (nunca na planilha real) |
+| `npm run importar:supabase -- <backup>` | simula a importação do backup do Supabase (`--aplicar` grava) |
+| `npm test`              | suíte completa da API (memória + caminho da planilha)  |
 | `npm run typecheck`     | typecheck de todos os workspaces                     |
 | `npm run docker:logs`   | logs da API no compose                               |
 
 ---
 
+## Banco de dados no Google Sheets
+
+Em produção os dados ficam numa planilha do Google. Cada tabela é uma aba
+(`professores`, `perfis`, `admins`, `campi`, `registros_ponto`,
+`refresh_tokens`, `logs_auditoria`), com os mesmos nomes de coluna do antigo
+banco Postgres.
+
+A API (no Render) não fala com a planilha diretamente: ela chama um **Web App
+do Apps Script** ([`apps/apps-script/Code.gs`](apps/apps-script/Code.gs)), que
+só lê abas e aplica lotes de escrita. Toda a regra de negócio continua na API.
+
+```
+navegador / app ──HTTPS──> API (Render) ──HTTPS + chave──> Apps Script ──> planilha
+```
+
+Como a API trata os dados:
+
+- **Cópia em memória, gravação imediata.** A API lê cada aba quando precisa e
+  guarda uma cópia. Toda escrita vai para a planilha antes de a requisição
+  terminar; se a planilha falhar, a mudança é desfeita na memória e o usuário
+  recebe um erro 503 ("tente novamente"). Nada fica gravado só pela metade.
+- **Releitura periódica.** A cada `PLANILHA_CACHE_SEGUNDOS` (60 por padrão) a
+  API relê as abas, então correções feitas à mão na planilha aparecem sozinhas.
+  Se o Google falhar numa releitura, a API segue com a cópia que tem.
+- **Tudo é texto na planilha.** O `Code.gs` grava cada valor com um apóstrofo
+  na frente (invisível na célula). Isso impede o Sheets de transformar CPF com
+  zero inicial em número, data ISO em data local e, principalmente, texto que
+  comece com `=` em fórmula executável.
+- **Unicidade e cascata** (email/CPF únicos, apagar professor apaga os
+  registros dele) são garantidas pela API, como eram pelo Postgres.
+
+### Configurar a planilha (uma vez)
+
+1. Na conta Google da instituição, crie uma planilha nova (ex.: *UNIVC
+   Check-in — base de dados*). **Não a compartilhe com ninguém** (veja a seção
+   de LGPD).
+2. Na planilha: **Extensões → Apps Script**. Apague o conteúdo do `Code.gs`,
+   cole o de [`apps/apps-script/Code.gs`](apps/apps-script/Code.gs) e salve.
+3. No seletor de funções do editor, escolha **`configurarChave`** e clique em
+   **Executar**. O Google pede autorização: o script só pede acesso **a esta
+   planilha** (anotação `@OnlyCurrentDoc`). Depois, abra o **Registro de
+   execução** e copie a chave mostrada. Ela é a `APPS_SCRIPT_CHAVE`.
+4. Escolha **`testarConfiguracao`** e execute. O registro precisa mostrar
+   `Autoteste de formatacao: APROVADO`.
+5. **Implantar → Nova implantação → App da Web**:
+   - *Executar como*: **Eu**;
+   - *Quem pode acessar*: **Qualquer pessoa**.
+
+   Copie a URL terminada em `/exec`. Ela é a `APPS_SCRIPT_URL`.
+6. Opcional: abra a URL no navegador. A resposta deve ser
+   `{"ok":true,"servico":"univc-checkin","versao":1}`.
+
+> **"Qualquer pessoa" é necessário** para o Render chamar o Web App sem login
+> do Google. A proteção é a chave: sem ela, toda chamada é recusada. Trate a URL
+> e a chave como senhas. Para trocar a chave, rode `configurarChave` de novo e
+> atualize `APPS_SCRIPT_CHAVE` no Render.
+
+> **Atualizar o `Code.gs` depois**: cole a nova versão, salve e use
+> **Implantar → Gerenciar implantações → editar → Versão: Nova versão**. Assim a
+> URL continua a mesma. Uma "Nova implantação" geraria outra URL.
+
+As abas e colunas são criadas automaticamente pela API no primeiro acesso.
+
+### Editar a planilha à mão
+
+Pode, com cuidado. As alterações aparecem na API em até
+`PLANILHA_CACHE_SEGUNDOS`.
+
+- Não renomeie abas nem colunas, não altere a coluna `id` e não deixe vazias
+  células obrigatórias.
+- Se uma célula ficar inválida (texto numa coluna numérica, status
+  inexistente...), a API responde 503 dizendo **aba, coluna e id da linha**.
+  Basta corrigir a célula.
+- Para o dia a dia, prefira o painel do RH: edições manuais na planilha **não
+  entram na trilha de auditoria**.
+
+### Limites
+
+- **Uma instância da API.** A cópia em memória é por processo. Com duas
+  instâncias, uma não veria as escritas da outra até a releitura.
+- **Cada escrita leva cerca de 1–2 s** (ida e volta ao Apps Script), e as
+  execuções do Apps Script estão sujeitas às cotas diárias da conta Google.
+- **Tamanho.** Uma planilha comporta até 10 milhões de células. `logs_auditoria`
+  é a aba que mais cresce; acompanhe e arquive linhas antigas quando necessário.
+- **Cópias de segurança.** O Sheets mantém histórico de versões
+  (*Arquivo → Histórico de versões*). Para uma cópia independente, use
+  *Arquivo → Fazer uma cópia* ou baixe como `.xlsx` periodicamente.
+
+---
+
+## Migração do backup do Supabase
+
+O banco anterior (Supabase) foi pausado no plano gratuito. Pelo painel dá para
+baixar o backup (`db_cluster-*.backup.gz`) sem reativar o projeto, e o
+importador leva esse arquivo para a planilha:
+
+```bash
+# Com APPS_SCRIPT_URL e APPS_SCRIPT_CHAVE no .env:
+npm run importar:supabase -- /caminho/db_cluster-14-09-2026.backup.gz            # simula
+npm run importar:supabase -- /caminho/db_cluster-14-09-2026.backup.gz --aplicar  # grava
+```
+
+O que ele faz:
+
+1. Lê os blocos `COPY` do dump, sem executar nenhum SQL do arquivo.
+2. Converte para o esquema atual. Num backup anterior aos perfis, cria os
+   perfis *Professor*, *Estagiário* e *Estudante* e vincula quem já existia a
+   *Professor*, exatamente como a migration de outubro fazia.
+3. Valida tudo antes de gravar: unicidade, referências e uma ida e volta de
+   cada valor pela codificação da planilha. **Qualquer coisa que não possa ser
+   levada sem perda aborta a importação.**
+4. Com `--aplicar`: roda o autoteste de formatação na planilha real, recusa
+   planilha que já tenha dados, grava aba por aba e, no fim, **relê tudo e
+   confere campo a campo com o backup**.
+
+Os hashes de senha vão junto, então todo mundo continua entrando com a mesma
+senha. Não versione o arquivo do backup: ele contém dados pessoais.
+
+---
+
 ## Deploy no Render
 
-O banco continua sendo o Supabase (configurado à parte, direto no painel do
-Supabase). O [`render.yaml`](render.yaml) na raiz descreve dois serviços:
+Os dados ficam na planilha (seção anterior). O
+[`render.yaml`](render.yaml) na raiz descreve dois serviços:
 
 | Serviço                    | Tipo        | O que serve                              |
 | --------------------------- | ----------- | ----------------------------------------- |
@@ -240,16 +333,15 @@ Supabase). O [`render.yaml`](render.yaml) na raiz descreve dois serviços:
 2. O Render vai criar os dois serviços a partir do `render.yaml`, mas algumas
    variáveis ficam marcadas para preencher manualmente (`sync: false`) — o
    painel pede isso durante a criação:
-   - **`univc-checkin-api`** → `DATABASE_URL`: connection string do **Session
-     pooler** do Supabase (Project Settings → Database → Connection string;
-     a conexão direta `db.<ref>.supabase.co` é IPv6-only e não funciona em
-     boa parte dos ambientes). `CORS_ORIGINS` pode ficar em branco por
-     enquanto — é ajustada no passo 4.
+   - **`univc-checkin-api`** → `APPS_SCRIPT_URL` e `APPS_SCRIPT_CHAVE`, da
+     [configuração da planilha](#configurar-a-planilha-uma-vez). Sem elas a
+     API se recusa a subir em produção. `CORS_ORIGINS` pode ficar em branco
+     por enquanto, porque é ajustada no passo 4.
    - **`univc-checkin-dashboard`** → `VITE_API_URL`: também deixe em branco
      por enquanto.
-3. Deploy inicial: a API sobe (rodando `prisma migrate deploy` como parte do
-   build) e o dashboard builda, mas sem as URLs cruzadas o CORS ainda barra as
-   chamadas. Anote as duas URLs que o Render atribuiu, do tipo
+3. Deploy inicial: a API sobe (criando abas e colunas que faltarem na
+   planilha) e o dashboard builda, mas sem as URLs cruzadas o CORS ainda barra
+   as chamadas. Anote as duas URLs que o Render atribuiu, do tipo
    `https://univc-checkin-api.onrender.com` e
    `https://univc-checkin-dashboard.onrender.com`.
 4. Preencha as variáveis que faltaram e reimplante:
@@ -264,6 +356,11 @@ Supabase). O [`render.yaml`](render.yaml) na raiz descreve dois serviços:
 > tráfego e o primeiro request depois disso demora mais (cold start). Isso é
 > esperado e não indica problema na API.
 
+> **Serviço já existente, que usava o Supabase**: em *Environment*, apague
+> `DATABASE_URL` (e `RUN_MIGRATIONS_ON_BOOT`, se existir) e adicione
+> `APPS_SCRIPT_URL` e `APPS_SCRIPT_CHAVE`. O próximo deploy já sobe sobre a
+> planilha.
+
 ---
 
 ## Deploy na VPS
@@ -271,8 +368,9 @@ Supabase). O [`render.yaml`](render.yaml) na raiz descreve dois serviços:
 Alternativa ao Render: rodar a API, o dashboard e o app do professor em
 containers Docker numa VPS própria, atrás de um Caddy que já esteja
 publicando outros serviços na mesma máquina (é o caso da VPS de referência
-deste projeto, que também roda o `agente-univc`). O banco continua sendo o
-Supabase externo — este compose não sobe Postgres.
+deste projeto, que também roda o `agente-univc`). Os dados ficam na planilha
+do Google (veja [Banco de dados no Google Sheets](#banco-de-dados-no-google-sheets)),
+então este compose não sobe banco nenhum.
 
 **Arquivos relevantes:**
 
@@ -296,7 +394,7 @@ Supabase externo — este compose não sobe Postgres.
 2. Configure as variáveis:
    ```bash
    cp .env.production.example .env.production
-   # edite .env.production: DATABASE_URL (Supabase), JWT secrets
+   # edite .env.production: APPS_SCRIPT_URL e APPS_SCRIPT_CHAVE, JWT secrets
    # (openssl rand -hex 32), CORS_ORIGINS (uma origem por app, separadas por
    # vírgula: dashboard E app do professor) e VITE_API_URL com o domínio
    # público da API.
@@ -336,7 +434,7 @@ Supabase externo — este compose não sobe Postgres.
 
 ## Usuários de teste
 
-Criados pelo seed (`apps/api/prisma/seed.ts`):
+Criados pelo seed (`apps/api/scripts/seed.ts`) no ambiente local:
 
 **Painel do RH — `http://localhost:5173/rh`**
 
@@ -364,11 +462,10 @@ Criados pelo seed (`apps/api/prisma/seed.ts`):
 
 > A coordenada vem do Plus Code oficial do campus (`75G3+VW`, R. Humberto de
 > Almeida Francklin, 217, Universitário, São Mateus/ES), conferida com uma
-> segunda referência em graus/minutos/segundos (diferença de ~20 m). O seed só
-> grava esse valor quando roda; **em um banco que já existe (por exemplo o
-> Supabase de produção), o campus precisa ser corrigido direto na tabela
-> `campi`** (SQL Editor ou `npx prisma studio -w @univc/api`). O modelo aceita
-> vários campi, e a validação sempre usa o raio do campus mais próximo.
+> segunda referência em graus/minutos/segundos (diferença de ~20 m). Em
+> produção, o campus vive na aba **`campi`** da planilha: é lá que se corrige a
+> coordenada ou o raio, ou se acrescenta um polo novo. O modelo aceita vários
+> campi, e a validação sempre usa o raio do campus mais próximo.
 
 O seed também cria registros históricos: dois dias completos de uma professora,
 um registro fora do raio pendente de aprovação e uma chegada sem saída — o
@@ -477,7 +574,7 @@ professor — sessões antigas em outros aparelhos precisam logar de novo.
 #### Gestão de usuários e perfis pelo RH
 
 O dashboard (abas **Usuarios** e **Perfis**) cobre o ciclo completo do cadastro,
-sem precisar de `prisma studio`:
+sem precisar mexer na planilha:
 
 - **Cadastrar** — nome, CPF, email, curso ou setor e perfil. Uma senha
   temporária é gerada na hora (mesma mecânica do reset) e o usuário é
@@ -636,6 +733,20 @@ decisão de validar ou não o ponto, e ficam visíveis para o RH na trilha de
 auditoria. A posição só é lida no instante em que o professor toca no botão,
 nunca em segundo plano.
 
+### A planilha é o banco de dados
+
+Tudo isso mora na planilha do Google, e **quem tiver acesso a ela vê tudo**:
+CPFs, emails, hashes de senha e as coordenadas de cada registro. Por isso:
+
+- a planilha fica na conta institucional e **não é compartilhada** com
+  ninguém. O RH usa o painel, não a planilha;
+- o Apps Script roda como o dono da planilha e só tem acesso a ela
+  (`@OnlyCurrentDoc`);
+- a URL do Web App e a `APPS_SCRIPT_CHAVE` são credenciais: ficam só nas
+  variáveis de ambiente do Render, nunca no repositório;
+- as cópias de segurança (`.xlsx`, "Fazer uma cópia") e o backup antigo do
+  Supabase têm os mesmos dados e merecem o mesmo cuidado.
+
 ### Integridade do horário
 
 O `timestamp_servidor` é gerado por `new Date()` dentro do handler do
@@ -650,12 +761,28 @@ cliente").
 ## Testes
 
 ```bash
-npm test                              # tudo
-npm run test:unit -w @univc/api       # só unitários (não precisam de banco)
-npm run test:integration -w @univc/api
+npm test                                # tudo: memória + caminho da planilha
+npm run test:unit -w @univc/api         # só unitários
+npm run test:integration -w @univc/api  # integração com armazenamento em memória
+npm run test:planilha -w @univc/api     # integração passando pelo Code.gs
 ```
 
-**73 testes**, divididos em:
+Nenhum teste precisa de serviço externo. A integração roda duas vezes:
+
+- **em memória**, rápida, sobre o mesmo motor de dados usado em produção;
+- **pelo caminho da planilha**: cada operação vai por HTTP até o `Code.gs`
+  real, executado numa planilha simulada (`tests/apoio/google-falso.ts`). Essa
+  planilha reproduz o comportamento do Sheets que mais estraga dado: converte
+  texto que parece número ou data e executa texto que começa com `=`. Se a
+  proteção do apóstrofo falhar, os testes acusam.
+
+Além dos arquivos abaixo, `tests/unit/banco.test.ts` cobre a camada de dados
+(desfazer ao falhar a gravação, unicidade, cascata, releitura, codificação),
+`tests/unit/apps-script.test.ts` cobre o `Code.gs` (chave, lote validado antes
+de escrever, idempotência, remoção em bloco, autoteste) e
+`tests/unit/importacao.test.ts` cobre a importação do backup.
+
+Os demais testes:
 
 - `tests/unit/geo.test.ts` — Haversine (distância conhecida, simetria,
   antimeridiano, antípodas) e a geocerca (borda do raio, escolha do campus mais
@@ -665,8 +792,7 @@ npm run test:integration -w @univc/api
   sobrou) e a regra de alternância chegada/saída.
 - `tests/unit/jornada.test.ts` — pareamento, soma de horas, agrupamento por dia
   no fuso certo e cada tipo de inconsistência.
-- `tests/integration/checkin.test.ts` — fluxo completo do `POST /checkin` contra
-  um Postgres real: login, validação dentro do raio, pendência fora do raio,
+- `tests/integration/checkin.test.ts` — fluxo completo do `POST /checkin`: login, validação dentro do raio, pendência fora do raio,
   rejeição de horário forjado, recusa de payload sem coordenadas, compatibilidade
   com app antigo que ainda envie `metodo_biometrico`, sequência inválida, fila
   offline, auditoria, histórico, aprovação manual pelo RH e bloqueio de professor
@@ -681,9 +807,8 @@ npm run test:integration -w @univc/api
   bloqueio de professor tentando usar as rotas, e a exclusão em cascata dos
   registros de ponto.
 
-Os testes de integração usam `DATABASE_URL_TEST` (banco separado, truncado a
-cada teste) e **se marcam como pulados** se o Postgres não estiver no ar, para
-`npm test` não quebrar numa máquina sem Docker ligado.
+O banco dos testes é esvaziado antes de cada teste com `banco.$limpar()`, que
+só existe em armazenamento de teste: chamá-lo com a planilha real dá erro.
 
 ---
 
@@ -698,9 +823,20 @@ cada teste) e **se marcam como pulados** se o Postgres não estiver no ar, para
 - **Refresh token opaco no banco** — o access token é JWT stateless; o refresh
   fica no banco como hash, o que permite revogar sessão de professor desligado
   sem esperar o token expirar.
-- **Contrato em `snake_case`, banco em `camelCase`** — o payload HTTP segue o
-  que foi especificado; o Prisma mapeia para `snake_case` no banco via `@map`.
-  A conversão fica isolada em `src/lib/serializar.ts`.
+- **Contrato em `snake_case`, modelos em `camelCase`** — o payload HTTP segue o
+  que foi especificado, e as colunas da planilha mantêm os nomes `snake_case`
+  do antigo Postgres (`src/dados/esquema.ts`). A conversão para a API fica
+  isolada em `src/lib/serializar.ts`.
+- **Google Sheets como banco, com a API no meio** — a planilha não pausa por
+  inatividade (o motivo da saída do Supabase) e o RH consegue consultar os
+  dados direto nela. O navegador nunca fala com o Apps Script: Web Apps não
+  aceitam o cabeçalho `Authorization` por CORS, e manter a API no meio preserva
+  login, validação, rate limit e auditoria.
+- **Camada de dados com a mesma interface do Prisma** — `src/dados/banco.ts`
+  implementa só o subconjunto que as rotas usam (`findMany`, `update`,
+  `$transaction`...), então a troca de banco não mexeu na regra de negócio, e os
+  testes existentes passaram sem alteração de lógica. Campo ou operador fora
+  desse subconjunto gera erro em vez de ser ignorado em silêncio.
 - **Timezone via `Intl`, sem biblioteca de datas** — `Intl.DateTimeFormat`
   resolve fuso e horário de verão sem dependência extra (`src/lib/datas.ts`).
 - **Login genérico em falha** — email inexistente e senha errada devolvem a
@@ -709,11 +845,12 @@ cada teste) e **se marcam como pulados** se o Postgres não estiver no ar, para
 
 ### Limitações conhecidas
 
+- O `Code.gs` foi testado num ambiente Google **simulado**, não contra o Google
+  de verdade. O comportamento do apóstrofo é verificado na planilha real pelo
+  autoteste (`testarConfiguracao` e o importador, que não grava se ele falhar).
 - O `docker compose up` **não foi exercitado** no ambiente onde este código foi
   escrito (o pull de imagens do Docker Hub estava bloqueado por política de
-  rede). A API, as migrations, o seed, os 53 testes e o dashboard foram
-  validados contra um PostgreSQL 16 local; o `Dockerfile` e o `docker-compose.yml`
-  seguem a mesma sequência de comandos, mas ainda não rodaram de ponta a ponta.
+  rede). O `Dockerfile` segue os mesmos passos de build validados localmente.
 - `npm audit` acusa avisos em dependências de desenvolvimento do Expo (`metro`,
   `image-size`). O `npm audit fix --force` resolveria rebaixando o Expo para o
   SDK 53 — pior negócio. Nada disso entra no bundle do app.
@@ -730,5 +867,5 @@ Por decisão do escopo, **não** estão implementados:
   presença é comprovada só por localização (ver a seção de LGPD);
 - totens físicos de ponto (fase 2);
 - infraestrutura de produção/cloud, CI/CD, observabilidade;
-- cadastro de campi pela interface — hoje via seed ou `npx prisma studio`
-  (professores já têm CRUD completo no dashboard, aba **Professores**).
+- cadastro de campi pela interface — hoje direto na aba `campi` da planilha
+  (professores já têm CRUD completo no dashboard, aba **Usuarios**).

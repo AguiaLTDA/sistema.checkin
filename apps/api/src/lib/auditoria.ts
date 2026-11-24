@@ -1,6 +1,6 @@
-import type { AcaoAuditoria, ResultadoAuditoria } from '@prisma/client';
+import type { AcaoAuditoria, ResultadoAuditoria } from '../dados/modelos.js';
 import type { FastifyRequest } from 'fastify';
-import { prisma } from '../prisma.js';
+import { banco } from '../banco.js';
 
 export interface EntradaAuditoria {
   acao: AcaoAuditoria;
@@ -27,7 +27,7 @@ export async function registrarAuditoria(
   entrada: EntradaAuditoria,
 ): Promise<void> {
   try {
-    await prisma.logAuditoria.create({
+    await banco.logAuditoria.create({
       data: {
         acao: entrada.acao,
         resultado: entrada.resultado,

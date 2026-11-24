@@ -2,20 +2,15 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { construirApp } from '../../src/app.js';
 import { gerarHashSenha } from '../../src/lib/senha.js';
-import { prisma } from '../../src/prisma.js';
+import { banco } from '../../src/banco.js';
 
 /**
  * CRUD de usuarios pelo RH (POST/PATCH/DELETE /admin/professores[/:id]) e dos
  * perfis que os classificam (/admin/perfis).
  *
- * Roda contra um Postgres real (DATABASE_URL_TEST), igual a
- * tests/integration/checkin.test.ts.
+ * Roda contra a camada de dados real com armazenamento em memoria (o mesmo
+ * motor usado com a planilha), limpo antes de cada teste.
  */
-const bancoDisponivel = await prisma
-  .$connect()
-  .then(() => true)
-  .catch(() => false);
-
 const PROFESSOR = {
   nome: 'Ana Beatriz Rocha',
   cpf: '11122233344',
@@ -26,7 +21,7 @@ const PROFESSOR = {
 
 const ADMIN = { nome: 'RH Teste', email: 'rh@univc.br', senha: 'admin123' };
 
-describe.skipIf(!bancoDisponivel)('cadastro de professores (CRUD do RH)', () => {
+describe('cadastro de professores (CRUD do RH)', () => {
   let app: FastifyInstance;
   let professorId: string;
   let perfilProfessorId: string;
@@ -39,22 +34,19 @@ describe.skipIf(!bancoDisponivel)('cadastro de professores (CRUD do RH)', () => 
 
   afterAll(async () => {
     await app?.close();
-    await prisma.$disconnect();
   });
 
   beforeEach(async () => {
-    await prisma.$executeRawUnsafe(
-      'TRUNCATE TABLE "logs_auditoria", "refresh_tokens", "registros_ponto", "campi", "professores", "perfis", "admins" RESTART IDENTITY CASCADE',
-    );
+    await banco.$limpar();
 
     perfilProfessorId = (
-      await prisma.perfil.create({ data: { nome: 'Professor' } })
+      await banco.perfil.create({ data: { nome: 'Professor' } })
     ).id;
     perfilEstagiarioId = (
-      await prisma.perfil.create({ data: { nome: 'Estagiário' } })
+      await banco.perfil.create({ data: { nome: 'Estagiário' } })
     ).id;
 
-    const professor = await prisma.professor.create({
+    const professor = await banco.professor.create({
       data: {
         nome: PROFESSOR.nome,
         cpf: PROFESSOR.cpf,
@@ -66,7 +58,7 @@ describe.skipIf(!bancoDisponivel)('cadastro de professores (CRUD do RH)', () => 
     });
     professorId = professor.id;
 
-    await prisma.admin.create({
+    await banco.admin.create({
       data: {
         nome: ADMIN.nome,
         email: ADMIN.email,
@@ -216,7 +208,7 @@ describe.skipIf(!bancoDisponivel)('cadastro de professores (CRUD do RH)', () => 
     expect(resposta.statusCode).toBe(200);
     expect(resposta.json().professor.nome).toBe('Ana Beatriz Rocha Silva');
 
-    const professor = await prisma.professor.findUniqueOrThrow({
+    const professor = await banco.professor.findUniqueOrThrow({
       where: { id: professorId },
     });
     expect(professor.cursoVinculado).toBe('Direito Empresarial');
@@ -250,7 +242,7 @@ describe.skipIf(!bancoDisponivel)('cadastro de professores (CRUD do RH)', () => 
   });
 
   it('RH apaga um professor definitivamente, removendo tambem os registros de ponto dele', async () => {
-    await prisma.registroPonto.create({
+    await banco.registroPonto.create({
       data: {
         professorId,
         tipo: 'CHEGADA',
@@ -265,9 +257,9 @@ describe.skipIf(!bancoDisponivel)('cadastro de professores (CRUD do RH)', () => 
     const resposta = await apagar(tokenAdmin, professorId);
     expect(resposta.statusCode).toBe(204);
 
-    expect(await prisma.professor.findUnique({ where: { id: professorId } }))
+    expect(await banco.professor.findUnique({ where: { id: professorId } }))
       .toBeNull();
-    expect(await prisma.registroPonto.count({ where: { professorId } })).toBe(
+    expect(await banco.registroPonto.count({ where: { professorId } })).toBe(
       0,
     );
   });
@@ -412,7 +404,7 @@ describe.skipIf(!bancoDisponivel)('cadastro de professores (CRUD do RH)', () => 
 
   it('filtra registros e jornada por perfil', async () => {
     const tokenAdmin = await autenticarAdmin();
-    const estagiario = await prisma.professor.create({
+    const estagiario = await banco.professor.create({
       data: {
         nome: 'Lucas Dias',
         cpf: '66677788899',
@@ -423,7 +415,7 @@ describe.skipIf(!bancoDisponivel)('cadastro de professores (CRUD do RH)', () => 
       },
     });
     for (const id of [professorId, estagiario.id]) {
-      await prisma.registroPonto.create({
+      await banco.registroPonto.create({
         data: {
           professorId: id,
           tipo: 'CHEGADA',

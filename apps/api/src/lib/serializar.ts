@@ -1,4 +1,4 @@
-import type { Campus, Perfil, Professor, RegistroPonto } from '@prisma/client';
+import type { Campus, Perfil, Professor, RegistroPonto } from '../dados/modelos.js';
 import type {
   PerfilDTO,
   RegistroPontoDTO,
@@ -12,7 +12,7 @@ type RegistroCompleto = RegistroPonto & {
   professor?: ProfessorComPerfil | null;
 };
 
-/** Converte o registro do Prisma (camelCase) no DTO da API (snake_case). */
+/** Converte o registro do banco (camelCase) no DTO da API (snake_case). */
 export function registroParaDTO(registro: RegistroCompleto): RegistroPontoDTO {
   const campus = registro.campus ?? null;
 
